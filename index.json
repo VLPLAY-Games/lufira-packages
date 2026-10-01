@@ -1,0 +1,220 @@
+{
+  "packages": [
+    {
+      "name": "bg",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16064,
+      "sha256": "aac7b027d6271fd881c128ad384e0ea9f73a7cd02b75d28dfbc46812110a1fce",
+      "lpg": "build/bg.lpg"
+    },
+    {
+      "name": "cat",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16336,
+      "sha256": "946a6c4eba10ff04da743cf2a1d66eb77beb490637a884d3975670e80793a16d",
+      "lpg": "build/cat.lpg"
+    },
+    {
+      "name": "chmod",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 15968,
+      "sha256": "920e7a5f51e471d1272db2cabd5231486dff295ebc5d240c8a5e202a0292b7d2",
+      "lpg": "build/chmod.lpg"
+    },
+    {
+      "name": "chown",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 15984,
+      "sha256": "15683b1e5f9b84f817db6f3f945c32e70e0e2a2a7d82e7f901fd1a2c3aee7f40",
+      "lpg": "build/chown.lpg"
+    },
+    {
+      "name": "color",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16208,
+      "sha256": "d1962c0b0b628d659ee4f051ff96dce0ae99c34b354b973b7ce736cbab7b388c",
+      "lpg": "build/color.lpg"
+    },
+    {
+      "name": "cp",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16632,
+      "sha256": "25276c274bdecee59ea029fcb5268a93c9a2382f8f6770d1f0e7e7161f9a4fd9",
+      "lpg": "build/cp.lpg"
+    },
+    {
+      "name": "devmode",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16056,
+      "sha256": "fa14f81d719e3025bc5b0f80dda47ddb628e0b989d5767cf86f4baf3a128479f",
+      "lpg": "build/devmode.lpg"
+    },
+    {
+      "name": "dlpg",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 22136,
+      "sha256": "c11036bf120c2eb3ea175a963cc723a81a487764a693f353bf11bc0ae271c445",
+      "lpg": "build/dlpg.lpg"
+    },
+    {
+      "name": "fg",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16064,
+      "sha256": "a732bcdd1d9a22684b3822c13abd0eb2d13166743da9ebb707f3b66df6a02940",
+      "lpg": "build/fg.lpg"
+    },
+    {
+      "name": "kill",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16144,
+      "sha256": "bc344d77c352cf1f9bb16f656e4cce360193af153a7e1d95c079ac8eed641826",
+      "lpg": "build/kill.lpg"
+    },
+    {
+      "name": "ls",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16232,
+      "sha256": "bea5b3bef1539c538e44479936db27419d815d14a70de25ac476e5c1b88aeb79",
+      "lpg": "build/ls.lpg"
+    },
+    {
+      "name": "mkdir",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16016,
+      "sha256": "f057f8fd0dc12b955d3e83520022a831d4c9e59a664670abc9797058c30f11ac",
+      "lpg": "build/mkdir.lpg"
+    },
+    {
+      "name": "mv",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16680,
+      "sha256": "f670250f60954fb95a1287624b93e8085673c102f7d2b0c37411d9fffffacfdd",
+      "lpg": "build/mv.lpg"
+    },
+    {
+      "name": "ps",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16184,
+      "sha256": "6293e2152877aeaa46ffc610626bcdf11d4b1cb6e724e060571ca4694943d065",
+      "lpg": "build/ps.lpg"
+    },
+    {
+      "name": "reboot",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 15936,
+      "sha256": "7256decfe24e4720ec547a87151158e628f3b5650f234599d8b3f24b5c1b9268",
+      "lpg": "build/reboot.lpg"
+    },
+    {
+      "name": "reset",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 15984,
+      "sha256": "672f9b97a7dc1ad93224fe21f7b5a200d343b53b50b5a550a47d3d99a119a1d0",
+      "lpg": "build/reset.lpg"
+    },
+    {
+      "name": "rm",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16576,
+      "sha256": "8eb8722ede1ce60ee2380c970951f2e831bf3fcb60b4b662df8ff592b6a3015d",
+      "lpg": "build/rm.lpg"
+    },
+    {
+      "name": "shutdown",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16008,
+      "sha256": "c9e29695028fc51cc74de8658d69c4b1223612f6d42d435dc823beaea147ef80",
+      "lpg": "build/shutdown.lpg"
+    },
+    {
+      "name": "touch",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16136,
+      "sha256": "687f05e2874603dcd120c37fa756e49f173efe886aa50cdf06c220c4abef070c",
+      "lpg": "build/touch.lpg"
+    },
+    {
+      "name": "write",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16272,
+      "sha256": "e5c5cffbab96416c44e519ac5ac1dcb7e287b843258c60d8071d5c20caf36bf7",
+      "lpg": "build/write.lpg"
+    },
+    {
+      "name": "cpuload",
+      "version": "1.1.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 16088,
+      "sha256": "0baa5f2930940ea6c86f096761e7cd714b7bf541eb14f02b2aba59c35040435c",
+      "lpg": "build/cpuload.lpg"
+    },
+    {
+      "name": "df",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 16016,
+      "sha256": "9ecbd987db479f8d7a4e5c60b69cca9d6434aa11698cc87daa443bd319f47b08",
+      "lpg": "build/df.lpg"
+    },
+    {
+      "name": "du",
+      "version": "1.0.1",
+      "category": "user",
+      "dependencies": [],
+      "size": 19096,
+      "sha256": "e2b1e3ca4364bd303e98d42f73d924c02b9c7162fa56e8535dde6df2a1510c7a",
+      "lpg": "build/du.lpg"
+    },
+    {
+      "name": "free",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 15984,
+      "sha256": "0dc3cd84dd6358b67e58683d2f70ad6c0615cd39cf430646de285a9464e67fe5",
+      "lpg": "build/free.lpg"
+    }
+  ]
+}
