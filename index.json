@@ -82,6 +82,15 @@
       "lpg": "build/fg.lpg"
     },
     {
+      "name": "groupadd",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16040,
+      "sha256": "be98d226474ce7f05ad846e8afbe38587599491d9f9551392b579700f86504c1",
+      "lpg": "build/groupadd.lpg"
+    },
+    {
       "name": "kill",
       "version": "1.0.0",
       "category": "base",
@@ -95,8 +104,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16232,
-      "sha256": "bea5b3bef1539c538e44479936db27419d815d14a70de25ac476e5c1b88aeb79",
+      "size": 16432,
+      "sha256": "79d54a5045e5d08b4793d10817403c1bc9da9e9a40cdb952652adcf9262034b4",
       "lpg": "build/ls.lpg"
     },
     {
@@ -116,6 +125,15 @@
       "size": 16680,
       "sha256": "f670250f60954fb95a1287624b93e8085673c102f7d2b0c37411d9fffffacfdd",
       "lpg": "build/mv.lpg"
+    },
+    {
+      "name": "passwd",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16176,
+      "sha256": "ad7af3b7f54f211f50fe616b7ee2506fc0145c5d8a7b9450bcb23fdda1e70d54",
+      "lpg": "build/passwd.lpg"
     },
     {
       "name": "ps",
@@ -170,6 +188,51 @@
       "size": 16136,
       "sha256": "687f05e2874603dcd120c37fa756e49f173efe886aa50cdf06c220c4abef070c",
       "lpg": "build/touch.lpg"
+    },
+    {
+      "name": "usbinfo",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16008,
+      "sha256": "dfce8d1cf39131cb7dffc68ce4fc94c8ace4d153f9a84849ec220b18db722b3a",
+      "lpg": "build/usbinfo.lpg"
+    },
+    {
+      "name": "usbread",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16224,
+      "sha256": "d9b196010208c363278919dd48940216d18a93caf56692df49d6b91df03ccfad",
+      "lpg": "build/usbread.lpg"
+    },
+    {
+      "name": "usbwrite",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16272,
+      "sha256": "07e3ca2e3c75898220cd1925abffa4f65b9066258179617d5047bfa43921e41d",
+      "lpg": "build/usbwrite.lpg"
+    },
+    {
+      "name": "useradd",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16088,
+      "sha256": "6a87a6d792136214051317b38de25ace091e2aeec1dff6122e33a6143599549b",
+      "lpg": "build/useradd.lpg"
+    },
+    {
+      "name": "whoami",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 16392,
+      "sha256": "0f40a4a0592ea14421bfb0fa5de000e03473269f1aa82f8cb2d1990512a05f15",
+      "lpg": "build/whoami.lpg"
     },
     {
       "name": "write",

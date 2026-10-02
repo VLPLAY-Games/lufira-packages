@@ -9,12 +9,15 @@
 // SIGINT)-механизма.
 //
 // Сознательно НЕ полная замена: покрывает встроенные команды (cd/pwd/exit/
-// help/history/echo/clear/wait) и ЛЮБУЮ программу из /bin (все пакеты
-// этапов 1-5: du/df/free/cpuload/cp/mv/ls/mkdir/rm/kill/ps/dlpg). Команды,
-// которые в kernel-native шелле бьют напрямую в кернел-внутренние функции
-// без syscall'а (users/mount/network/sound/usb/color) — пока НЕ портированы
-// ни в пакеты, ни сюда; при попытке набрать такую команду shell.elf честно
-// ответит "unknown command", как и для любого другого не найденного /bin/*.
+// help/history/echo/clear/wait/su/mount/unmount) и ЛЮБУЮ программу из /bin
+// (все пакеты этапов 1-5: du/df/free/cpuload/cp/mv/ls/mkdir/rm/kill/ps/
+// dlpg/cat/touch/write/chmod/chown/fg/bg/color/reset/reboot/shutdown/
+// devmode/whoami/useradd/groupadd/passwd/usbinfo/usbread/usbwrite —
+// users/usb получили свои syscall'ы, color/mount давно не блокированы).
+// Network/sound всё ещё бьют в kernel-internal функции без syscall'а —
+// НЕ портированы ни в пакеты, ни сюда; при попытке набрать такую команду
+// shell.elf честно ответит "unknown command", как и для любого другого не
+// найденного /bin/*.
 //
 // argv[]/envp[] для SYS_EXEC — ТОЛЬКО static (не стек!): is_user_range_valid()
 // в SYS_EXEC проверяет фиксированный (MAX_EXEC_ARGS+1)*8 байт от начала
@@ -310,7 +313,15 @@ static void redraw_line(const char *line, int old_len, int old_cursor, int new_l
         for (int i = 0; i < old_len - new_len; i++) sys_write(1, " ", 1);
         for (int i = 0; i < old_len - new_len; i++) sys_write(1, "\b", 1);
     }
-    for (int i = 0; i < new_len - new_cursor; i++) sys_write(1, "\b", 1);
+    // Это ПОСЛЕДНИЙ шаг, после которого экран уже содержит правильное
+    // новое содержимое строки (только что дописано выше) — курсор нужно
+    // просто подвинуть назад к new_cursor, НЕ трогая то, что там
+    // нарисовано. raw '\b' тут бы стирал только что написанные символы
+    // (найдено живым тестированием: вставка символа в середину строки,
+    // например "abcdef" -> курсор между 'c' и 'd' -> вставить 'X',
+    // стирала хвост "def" этим самым циклом) — та же ошибка, что и у
+    // стрелок влево/вправо до их собственного фикса на con_cursor_left().
+    for (int i = 0; i < new_len - new_cursor; i++) con_cursor_left();
 }
 
 int main(void) {
@@ -344,11 +355,14 @@ int main(void) {
                 continue;
             }
             if (c == 0x01) { // стрелка влево — просто двигаем курсор, текст не меняется
-                if (cursor > 0) { sys_write(1, "\b", 1); cursor--; }
+                if (cursor > 0) { con_cursor_left(); cursor--; }
                 continue;
             }
-            if (c == 0x02) { // стрелка вправо
-                if (cursor < len) { sys_write(1, &line[cursor], 1); cursor++; }
+            if (c == 0x02) { // стрелка вправо — тот же принцип: раньше здесь
+                // перепечатывался line[cursor] (что ВЫГЛЯДИТ как перемещение
+                // только потому, что символ там не менялся), con_cursor_right()
+                // двигает курсор явно, без зависимости от содержимого строки
+                if (cursor < len) { con_cursor_right(); cursor++; }
                 continue;
             }
             if (c == 0x03 || c == 0x04) { // up/down arrow -> история

@@ -50,6 +50,20 @@ PACKAGES = {
     "reboot": ("1.0.0", "base", []),
     "shutdown": ("1.0.0", "base", []),
     "devmode": ("1.0.0", "base", []),
+    # v0.7 plan, stage 5, continued — the rest of what was still only
+    # reachable through the dead kernel-native kernel/shell/commands/*.c
+    # (users.c/usb.c). mount/unmount stay shell builtins (shell.c), not
+    # packages — see its own comment; mountls/mountcat/mountwrite from the
+    # dead code are deliberately NOT ported, now obsolete: a mounted path
+    # is just a normal path, so cd/ls/cat/cp/mkdir/rm/write already cover
+    # them (once SYS_CHDIR also knows about FAT mounts — see syscall.c).
+    "whoami": ("1.0.0", "base", []),
+    "useradd": ("1.0.0", "base", []),
+    "groupadd": ("1.0.0", "base", []),
+    "passwd": ("1.0.0", "base", []),
+    "usbinfo": ("1.0.0", "base", []),
+    "usbread": ("1.0.0", "base", []),
+    "usbwrite": ("1.0.0", "base", []),
 }
 
 LIBC_SOURCES = ["crt0.S", "src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c"]

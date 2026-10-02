@@ -31,6 +31,20 @@ static inline void con_clear(void) {
     sys_write(1, seq, 2);
 }
 
+// Двигают сам курсор-подчёркивание на одну позицию, НЕ трогая текст на
+// экране (в отличие от raw '\b', который console_putchar() в kernel/fs/
+// vfs/vfs.c трактует как "стереть символ слева" — тот путь годится для
+// Backspace, но не для стрелок влево/вправо).
+static inline void con_cursor_left(void) {
+    char seq[2] = {0x1B, 'l'};
+    sys_write(1, seq, 2);
+}
+
+static inline void con_cursor_right(void) {
+    char seq[2] = {0x1B, 'r'};
+    sys_write(1, seq, 2);
+}
+
 // Индексы палитры (16 цветов) — те же значения, что ConsoleColor
 // (kernel/lib/colors.h), для программ, которым не хочется тащить весь
 // заголовок ядра только за одним enum'ом.
