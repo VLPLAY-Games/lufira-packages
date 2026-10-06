@@ -74,7 +74,12 @@ PACKAGES = {
 # compile_libc_shared() и изменённую сборку в build_package()/
 # build_shell() (ld -dynamic-linker вместо -static).
 CRT0_SOURCE = "crt0.S"
-SHARED_LIBC_SOURCES = ["src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c"]
+# src/gui_widgets.c — v0.8 (GUI+WM), второй срез: кнопка/текстбокс поверх
+# SYS_WIN_* (см. lufira/gui_widgets.h) — та же единственная libc.so, не
+# отдельная библиотека (dynlink.c сегодня рассчитан ровно на одну, см.
+# его же комментарий у DT_NEEDED).
+SHARED_LIBC_SOURCES = ["src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c",
+                       "src/gui_widgets.c"]
 
 CC_FLAGS = [
     "-m64", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
