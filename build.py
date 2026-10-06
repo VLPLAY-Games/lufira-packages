@@ -66,11 +66,30 @@ PACKAGES = {
     "usbwrite": ("1.0.0", "base", []),
 }
 
-LIBC_SOURCES = ["crt0.S", "src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c"]
+# v0.8-мост, пункт 8 (динамическая линковка): crt0.S остаётся статически
+# слинкованным В КАЖДЫЙ исполняемый файл (как и положено crt-объекту —
+# это точка входа _start, её не бывает "общей"), а вот string/malloc/
+# printf/stdlib теперь живут ОДИН раз в libc.so (SHARED_LIBC_SOURCES ниже)
+# вместо того чтобы статически копироваться в каждый пакет — см.
+# compile_libc_shared() и изменённую сборку в build_package()/
+# build_shell() (ld -dynamic-linker вместо -static).
+CRT0_SOURCE = "crt0.S"
+SHARED_LIBC_SOURCES = ["src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c"]
 
 CC_FLAGS = [
     "-m64", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
     "-mgeneral-regs-only", "-mno-red-zone", "-nostdlib", "-static",
+    "-Wall", "-Wextra",
+]
+
+# -fPIC вместо -fno-pic/-fno-pie выше: ТОЛЬКО libc.so обязана быть
+# позиционно-независимой (ET_DYN, грузится ядром по произвольному
+# фиксированному VA — см. DYNLINK_LIBC_BASE в LufiraOS/kernel/system/elf/
+# dynlink.h) — сами пакеты остаются non-PIE (ET_EXEC, свой обычный
+# фиксированный адрес 0x400000, БЕЗ изменений в их собственной загрузке).
+SHARED_LIBC_CC_FLAGS = [
+    "-m64", "-ffreestanding", "-fno-builtin", "-fPIC",
+    "-mgeneral-regs-only", "-mno-red-zone", "-nostdlib",
     "-Wall", "-Wextra",
 ]
 
@@ -79,16 +98,35 @@ def _run(cmd, **kw) -> None:
     subprocess.run(cmd, check=True, **kw)
 
 
-def compile_libc_objects(lufira_repo: Path, out_dir: Path) -> list:
+def compile_crt0(lufira_repo: Path, out_dir: Path) -> Path:
     libc_dir = lufira_repo / "libc"
     flags = CC_FLAGS + [f"-I{libc_dir / 'include'}"]
+    obj = out_dir / "crt0.o"
+    _run(["gcc", *flags, "-c", str(libc_dir / CRT0_SOURCE), "-o", str(obj)])
+    return obj
+
+
+def compile_libc_shared(lufira_repo: Path, out_dir: Path) -> Path:
+    """libc.so — ОДИН общий разделяемый объект (string/malloc/printf/
+    stdlib), который ядро грузит и кэширует один раз на всю систему (см.
+    dynlink.c) — экономия памяти настоящей динамической линковки.
+    --hash-style=sysv ОБЯЗАТЕЛЕН: dynlink.c узнаёт число экспортных
+    символов из nchain классического DT_HASH, GNU_HASH не читает вовсе
+    (линейного перебора десятков символов достаточно — не горячий путь).
+    """
+    libc_dir = lufira_repo / "libc"
+    flags = SHARED_LIBC_CC_FLAGS + [f"-I{libc_dir / 'include'}"]
     objs = []
-    for rel in LIBC_SOURCES:
+    for rel in SHARED_LIBC_SOURCES:
         src = libc_dir / rel
-        obj = out_dir / (Path(rel).stem + ".o")
+        obj = out_dir / (Path(rel).stem + ".pic.o")
         _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
         objs.append(obj)
-    return objs
+
+    libc_so = out_dir / "libc.so"
+    _run(["ld", "-m", "elf_x86_64", "-shared", "-soname", "libc.so",
+          "--hash-style=sysv", "-o", str(libc_so), *[str(o) for o in objs]])
+    return libc_so
 
 
 def compile_lpg_pack(lufira_repo: Path, out_dir: Path) -> Path:
@@ -98,7 +136,7 @@ def compile_lpg_pack(lufira_repo: Path, out_dir: Path) -> Path:
     return lpg_pack_bin
 
 
-def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, libc_objs: list,
+def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: Path,
                    lpg_pack_bin: Path, name: str, version: str, category: str,
                    extra_includes: list) -> Path:
     src = repo_root / category / f"{name}.c"
@@ -109,9 +147,18 @@ def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, libc_objs: 
     obj = out_dir / f"{name}.o"
     _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
 
+    # v0.8-мост, пункт 8: -static убран (конфликтует с динамической
+    # линковкой — ld иначе не ищет .so вовсе, см. комментарий у
+    # compile_libc_shared()), crt0.o остаётся статическим, string/malloc/
+    # printf/stdlib теперь резолвятся через -lc в libc.so (-L указывает на
+    # ту же out_dir, где лежит сам libc.so). -dynamic-linker — чисто
+    # информационный путь в PT_INTERP (само ядро его не читает, резолвит
+    # сразу в exec(), см. dynlink.c), но настоящий путь на диске этой ОС
+    # уместнее мусорного дефолтного /lib64/ld-linux-x86-64.so.2 от хоста.
     elf = out_dir / f"{name}.elf"
-    _run(["ld", "-m", "elf_x86_64", "-static", "-nostdlib", "-no-pie",
-          "-o", str(elf), str(obj), *[str(o) for o in libc_objs]])
+    _run(["ld", "-m", "elf_x86_64", "-nostdlib", "-no-pie",
+          "-dynamic-linker", "/lib/ld.so",
+          "-o", str(elf), str(crt0_obj), str(obj), "-L", str(out_dir), "-lc"])
 
     manifest = (
         f"name={name}\n"
@@ -129,7 +176,7 @@ def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, libc_objs: 
     return lpg_path
 
 
-def build_shell(repo_root: Path, lufira_repo: Path, out_dir: Path, libc_objs: list) -> Path:
+def build_shell(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: Path) -> Path:
     """shell.elf — NOT a dlpg package (no manifest/.lpg): the kernel loads
     this exact file directly on every boot/respawn (spawn_shell_process(),
     LufiraOS/kernel/kernel.c), so dlpg must never see it in
@@ -143,9 +190,12 @@ def build_shell(repo_root: Path, lufira_repo: Path, out_dir: Path, libc_objs: li
     obj = out_dir / "shell.o"
     _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
 
+    # v0.8-мост, пункт 8 — тот же переход на динамическую линковку, что и
+    # build_package() выше (см. его комментарий).
     elf = out_dir / "shell.elf"
-    _run(["ld", "-m", "elf_x86_64", "-static", "-nostdlib", "-no-pie",
-          "-o", str(elf), str(obj), *[str(o) for o in libc_objs]])
+    _run(["ld", "-m", "elf_x86_64", "-nostdlib", "-no-pie",
+          "-dynamic-linker", "/lib/ld.so",
+          "-o", str(elf), str(crt0_obj), str(obj), "-L", str(out_dir), "-lc"])
     return elf
 
 
@@ -164,20 +214,24 @@ def main() -> None:
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
-    print("=== Compiling libc objects ===")
-    libc_objs = compile_libc_objects(args.lufira_repo, out_dir)
+    print("=== Compiling crt0.o ===")
+    crt0_obj = compile_crt0(args.lufira_repo, out_dir)
+
+    print("=== Compiling libc.so (shared) ===")
+    libc_so = compile_libc_shared(args.lufira_repo, out_dir)
+    print(f"  built {libc_so}")
 
     print("=== Compiling lpg_pack ===")
     lpg_pack_bin = compile_lpg_pack(args.lufira_repo, out_dir)
 
     print(f"=== Building {len(PACKAGES)} package(s) ===")
     for name, (version, category, extra_includes) in sorted(PACKAGES.items()):
-        lpg_path = build_package(repo_root, args.lufira_repo, out_dir, libc_objs,
+        lpg_path = build_package(repo_root, args.lufira_repo, out_dir, crt0_obj,
                                   lpg_pack_bin, name, version, category, extra_includes)
         print(f"  built {lpg_path}")
 
     print("=== Building shell.elf (direct-stage, not a package) ===")
-    shell_elf = build_shell(repo_root, args.lufira_repo, out_dir, libc_objs)
+    shell_elf = build_shell(repo_root, args.lufira_repo, out_dir, crt0_obj)
     print(f"  built {shell_elf}")
 
     print("=== Regenerating index.json ===")

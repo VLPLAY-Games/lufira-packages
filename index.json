@@ -5,8 +5,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16064,
-      "sha256": "aac7b027d6271fd881c128ad384e0ea9f73a7cd02b75d28dfbc46812110a1fce",
+      "size": 14200,
+      "sha256": "1107895681f85de998930dc93945f62d7e933013d0ab9382e1327bb2949ce26e",
       "lpg": "build/bg.lpg"
     },
     {
@@ -14,8 +14,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16336,
-      "sha256": "946a6c4eba10ff04da743cf2a1d66eb77beb490637a884d3975670e80793a16d",
+      "size": 14408,
+      "sha256": "87506fa3cdc5f62aca157898b14f34b2f053bad4e4122ac4d29ab2c2206df321",
       "lpg": "build/cat.lpg"
     },
     {
@@ -23,8 +23,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 15968,
-      "sha256": "920e7a5f51e471d1272db2cabd5231486dff295ebc5d240c8a5e202a0292b7d2",
+      "size": 14128,
+      "sha256": "8e03479e804932059a2bc51602f77090535f4933aa8589482f45fb1e5660fb30",
       "lpg": "build/chmod.lpg"
     },
     {
@@ -32,8 +32,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 15984,
-      "sha256": "15683b1e5f9b84f817db6f3f945c32e70e0e2a2a7d82e7f901fd1a2c3aee7f40",
+      "size": 14168,
+      "sha256": "cd972ef6e36a42404d038201847e5f301c56fd40639abe9dae1e6112c8f18405",
       "lpg": "build/chown.lpg"
     },
     {
@@ -41,8 +41,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16208,
-      "sha256": "d1962c0b0b628d659ee4f051ff96dce0ae99c34b354b973b7ce736cbab7b388c",
+      "size": 14280,
+      "sha256": "9b079b0eb8234451a18c3ea1c836ed89192d85195b7c966d17a2ffc902655e9b",
       "lpg": "build/color.lpg"
     },
     {
@@ -50,8 +50,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16632,
-      "sha256": "25276c274bdecee59ea029fcb5268a93c9a2382f8f6770d1f0e7e7161f9a4fd9",
+      "size": 14520,
+      "sha256": "67e7d6f32857c7eb4ac9e0a0a34a9da0e3e13d01f449ef8d73b12b84c2009d5f",
       "lpg": "build/cp.lpg"
     },
     {
@@ -59,8 +59,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16056,
-      "sha256": "fa14f81d719e3025bc5b0f80dda47ddb628e0b989d5767cf86f4baf3a128479f",
+      "size": 14176,
+      "sha256": "34af44ee1a63853837b7acab9d7e04fe6b0d1298599b077fdf24f4ac9ec8a317",
       "lpg": "build/devmode.lpg"
     },
     {
@@ -68,8 +68,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 22136,
-      "sha256": "c11036bf120c2eb3ea175a963cc723a81a487764a693f353bf11bc0ae271c445",
+      "size": 19312,
+      "sha256": "847614a5054e45f446dc56efb7655097c79d34ff8adaec924fa8cbf6b58c818f",
       "lpg": "build/dlpg.lpg"
     },
     {
@@ -77,8 +77,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16064,
-      "sha256": "a732bcdd1d9a22684b3822c13abd0eb2d13166743da9ebb707f3b66df6a02940",
+      "size": 14200,
+      "sha256": "e52b0ee373929f19d7508c91379d84b814b20677742549f97aba977988f7b1a3",
       "lpg": "build/fg.lpg"
     },
     {
@@ -86,8 +86,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16040,
-      "sha256": "be98d226474ce7f05ad846e8afbe38587599491d9f9551392b579700f86504c1",
+      "size": 14136,
+      "sha256": "09c1ffd9757bd93ba5bdb265103d7f0d595ee3b7967084cf5ad0cd3d535e4185",
       "lpg": "build/groupadd.lpg"
     },
     {
@@ -95,8 +95,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16144,
-      "sha256": "bc344d77c352cf1f9bb16f656e4cce360193af153a7e1d95c079ac8eed641826",
+      "size": 14200,
+      "sha256": "39448863707fd36cd97641f1dc47c4eab8692f97d18ba174df092ffed7023cbd",
       "lpg": "build/kill.lpg"
     },
     {
@@ -104,8 +104,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16432,
-      "sha256": "79d54a5045e5d08b4793d10817403c1bc9da9e9a40cdb952652adcf9262034b4",
+      "size": 14456,
+      "sha256": "dea371f639662e6b670e9520d0f37a9d30b7c9ac23b3e5462450f289c68a6a2a",
       "lpg": "build/ls.lpg"
     },
     {
@@ -113,8 +113,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16016,
-      "sha256": "f057f8fd0dc12b955d3e83520022a831d4c9e59a664670abc9797058c30f11ac",
+      "size": 14128,
+      "sha256": "5d58d55e49dc1102e7c03bfd934aa01561e03e5f94dc9a9e96e16db690462f06",
       "lpg": "build/mkdir.lpg"
     },
     {
@@ -122,8 +122,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16680,
-      "sha256": "f670250f60954fb95a1287624b93e8085673c102f7d2b0c37411d9fffffacfdd",
+      "size": 14552,
+      "sha256": "7bba89ebbafe2065fb189a78d7e912dff22d3bf620e78b2f25bbbb63dbe481ab",
       "lpg": "build/mv.lpg"
     },
     {
@@ -131,8 +131,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16176,
-      "sha256": "ad7af3b7f54f211f50fe616b7ee2506fc0145c5d8a7b9450bcb23fdda1e70d54",
+      "size": 14176,
+      "sha256": "9ab57ebc62a77402e3ad4881fc2bb5ff5080afc90460afea4a613bcca9f4a3b9",
       "lpg": "build/passwd.lpg"
     },
     {
@@ -140,8 +140,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16184,
-      "sha256": "6293e2152877aeaa46ffc610626bcdf11d4b1cb6e724e060571ca4694943d065",
+      "size": 14168,
+      "sha256": "0d9b210dc8602b1eeeb104a7fcd8b701fca955f453162cb331a52999bdef2e8e",
       "lpg": "build/ps.lpg"
     },
     {
@@ -149,8 +149,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 15936,
-      "sha256": "7256decfe24e4720ec547a87151158e628f3b5650f234599d8b3f24b5c1b9268",
+      "size": 14136,
+      "sha256": "1ffc25dfef8ed8c958040407ce2e025447e5b5cf8dab88f4decc33bb8c07b2f2",
       "lpg": "build/reboot.lpg"
     },
     {
@@ -158,8 +158,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 15984,
-      "sha256": "672f9b97a7dc1ad93224fe21f7b5a200d343b53b50b5a550a47d3d99a119a1d0",
+      "size": 14088,
+      "sha256": "46b8d548f65a7b9a4fbae0ba2640c19adea2e0787368145b2f645040f30454a3",
       "lpg": "build/reset.lpg"
     },
     {
@@ -167,8 +167,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16576,
-      "sha256": "8eb8722ede1ce60ee2380c970951f2e831bf3fcb60b4b662df8ff592b6a3015d",
+      "size": 14528,
+      "sha256": "4511e83623ac6d7895529af0132c26d1b26bd5f682a3488f49a4896d037c0b59",
       "lpg": "build/rm.lpg"
     },
     {
@@ -176,8 +176,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16008,
-      "sha256": "c9e29695028fc51cc74de8658d69c4b1223612f6d42d435dc823beaea147ef80",
+      "size": 14136,
+      "sha256": "7bd05476ea102032ffcc0c028620c08e00145f9ae35a6a8a766934e5d140a1bd",
       "lpg": "build/shutdown.lpg"
     },
     {
@@ -185,8 +185,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16136,
-      "sha256": "687f05e2874603dcd120c37fa756e49f173efe886aa50cdf06c220c4abef070c",
+      "size": 14240,
+      "sha256": "da76bb6acc8ab4afb4fee01dc89d536540a86b205457ec0dfb59ca173a7ccb6d",
       "lpg": "build/touch.lpg"
     },
     {
@@ -194,8 +194,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16008,
-      "sha256": "dfce8d1cf39131cb7dffc68ce4fc94c8ace4d153f9a84849ec220b18db722b3a",
+      "size": 14176,
+      "sha256": "9606ded190a24bfcb5f5c1a5d84f6ef962d3827c2a2accf9e8b447afdc090a7d",
       "lpg": "build/usbinfo.lpg"
     },
     {
@@ -203,8 +203,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16224,
-      "sha256": "d9b196010208c363278919dd48940216d18a93caf56692df49d6b91df03ccfad",
+      "size": 14208,
+      "sha256": "95a75b84738757bed073ed6198923ee377fd2ea34259a8ba9d0c5d4eee182507",
       "lpg": "build/usbread.lpg"
     },
     {
@@ -212,8 +212,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16272,
-      "sha256": "07e3ca2e3c75898220cd1925abffa4f65b9066258179617d5047bfa43921e41d",
+      "size": 14328,
+      "sha256": "bf7b226616145b3cfd135101a89594783a80df8b7f3854e7583f740a0ecf011f",
       "lpg": "build/usbwrite.lpg"
     },
     {
@@ -221,8 +221,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16088,
-      "sha256": "6a87a6d792136214051317b38de25ace091e2aeec1dff6122e33a6143599549b",
+      "size": 14136,
+      "sha256": "1c7f9961ce70c8241ee87d9fceb9741b37d8cd4767d51b857cea4975ef731057",
       "lpg": "build/useradd.lpg"
     },
     {
@@ -230,8 +230,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16392,
-      "sha256": "0f40a4a0592ea14421bfb0fa5de000e03473269f1aa82f8cb2d1990512a05f15",
+      "size": 14392,
+      "sha256": "27a59259f0b2e1042ca8afccc8c1c4e9b013bed6b578a52caea05c7ca111bcff",
       "lpg": "build/whoami.lpg"
     },
     {
@@ -239,8 +239,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 16272,
-      "sha256": "e5c5cffbab96416c44e519ac5ac1dcb7e287b843258c60d8071d5c20caf36bf7",
+      "size": 14272,
+      "sha256": "be714b8ce9a9f98c8b4db29b3d55f1c5dfbdfe03399ce74fcad1227f70d0351f",
       "lpg": "build/write.lpg"
     },
     {
@@ -248,8 +248,8 @@
       "version": "1.1.0",
       "category": "user",
       "dependencies": [],
-      "size": 16088,
-      "sha256": "0baa5f2930940ea6c86f096761e7cd714b7bf541eb14f02b2aba59c35040435c",
+      "size": 14208,
+      "sha256": "38a2072b2704b9938847312414b5955da0aebbb2ebbc03764148423bc0469144",
       "lpg": "build/cpuload.lpg"
     },
     {
@@ -257,8 +257,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 16016,
-      "sha256": "9ecbd987db479f8d7a4e5c60b69cca9d6434aa11698cc87daa443bd319f47b08",
+      "size": 14128,
+      "sha256": "9f6c7ed065b8f523752a1250ca7c171ed93e3bd79dd8bf1c2d8aadbd52bc0800",
       "lpg": "build/df.lpg"
     },
     {
@@ -266,8 +266,8 @@
       "version": "1.0.1",
       "category": "user",
       "dependencies": [],
-      "size": 19096,
-      "sha256": "e2b1e3ca4364bd303e98d42f73d924c02b9c7162fa56e8535dde6df2a1510c7a",
+      "size": 14600,
+      "sha256": "662153b21c3a6b442c0aea1b7db712979edf391709e865cabf8c2207d3ca3b1c",
       "lpg": "build/du.lpg"
     },
     {
@@ -275,8 +275,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 15984,
-      "sha256": "0dc3cd84dd6358b67e58683d2f70ad6c0615cd39cf430646de285a9464e67fe5",
+      "size": 14136,
+      "sha256": "d6189629728d4ec79352a0ce18462fe10317812e10a61a53af18916933493a82",
       "lpg": "build/free.lpg"
     }
   ]
