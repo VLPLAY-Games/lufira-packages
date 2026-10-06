@@ -244,13 +244,13 @@
       "lpg": "build/write.lpg"
     },
     {
-      "name": "counter_demo",
+      "name": "calc",
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 14520,
-      "sha256": "096709c68782b6d694d024f857e670eaa0afc8f98c3d0f492b5028845d933604",
-      "lpg": "build/counter_demo.lpg"
+      "size": 14928,
+      "sha256": "b6524046804c4fdbafc8d35a2254e64db6287fa27e868ea220d24079a53db178",
+      "lpg": "build/calc.lpg"
     },
     {
       "name": "cpuload",
@@ -260,15 +260,6 @@
       "size": 14208,
       "sha256": "38a2072b2704b9938847312414b5955da0aebbb2ebbc03764148423bc0469144",
       "lpg": "build/cpuload.lpg"
-    },
-    {
-      "name": "desktop",
-      "version": "1.0.0",
-      "category": "user",
-      "dependencies": [],
-      "size": 14672,
-      "sha256": "46f667104cc7b815a4ef3a060ddfe6ecb6c3bfcbc35a6b494c262411798795e9",
-      "lpg": "build/desktop.lpg"
     },
     {
       "name": "df",
@@ -316,6 +307,24 @@
       "lpg": "build/notepad.lpg"
     },
     {
+      "name": "sysinfo",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 14976,
+      "sha256": "db75b54d03ec7ce3b3229271253326f5bfc58938ed3b9646431053597c1aa5ef",
+      "lpg": "build/sysinfo.lpg"
+    },
+    {
+      "name": "terminal",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 15504,
+      "sha256": "53a98d5fdeb5bc8f5a0c3f7f6f366bcde25804b98102ba92f05229dca321ac1a",
+      "lpg": "build/terminal.lpg"
+    },
+    {
       "name": "text_demo",
       "version": "1.0.0",
       "category": "user",
@@ -329,8 +338,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 25176,
-      "sha256": "2000519a69f28e3047c4340a30a9809d10140e46f47471c554d9d822df9eb43a",
+      "size": 29592,
+      "sha256": "a98274f8d69ef79676020636f62e8a1b48ef54098f81922956e0028e69b96938",
       "lpg": "build/wm.lpg"
     }
   ]

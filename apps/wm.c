@@ -23,6 +23,16 @@
 //
 // Без иконок (прямое указание пользователя) — только примитивы
 // (прямоугольники, текст битмап-шрифтом).
+//
+// Этап 4: рабочий стол (фон + ярлыки запуска + таскбар) рисуется ПОСТОЯННО,
+// с самого sys_wm_register() — больше не ждёт первого окна. Ярлыки
+// запуска — замена отдельному GUI-клиенту desktop.c (удалён): пользователь
+// явно попросил "выбор программ... на экране самом", не в отдельном окне,
+// так что сам WM теперь и рисует подписанные прямоугольники прямо на фоне,
+// и форкает/exec'ает выбранное приложение по клику (см. launch_app()).
+// Раз рабочий стол теперь виден без единого открытого окна, у таскбара
+// появилась постоянная кнопка "Exit" (sys_exit() самого WM) — иначе не
+// было бы способа вернуться к текстовой консоли вовсе.
 
 #include <lufira/syscall.h>
 #include <lufira/wm_protocol.h>
@@ -68,6 +78,38 @@
 #define WM_STATE_PATH        "/etc/wm_state.conf"
 #define WM_STATE_MAX_ENTRIES 32
 #define WM_STATE_LINE_MAX    160
+
+// Этап 4: "выбор программ не в отдельном окне, а на экране самом" — раньше
+// был отдельный GUI-клиент desktop.c (окно "Desktop" с кнопками), теперь
+// удалён: сам WM рисует эти ярлыки прямо в фоновом слое рабочего стола (под
+// окнами, но над заливкой фона, см. composite_and_present()) и сам же
+// форкает/exec'ает выбранное приложение по клику. По-прежнему БЕЗ ИКОНОК
+// (прямое указание пользователя) — просто подписанные прямоугольники, тот
+// же стиль, что у кнопок таскбара.
+typedef struct {
+    const char *label;
+    const char *path;
+} desktop_launcher_t;
+
+static const desktop_launcher_t g_launchers[] = {
+    {"Terminal", "/bin/terminal.elf"},
+    {"Notepad",  "/bin/notepad.elf"},
+    {"Files",    "/bin/files.elf"},
+    {"Calc",     "/bin/calc.elf"},
+    {"Sys Info", "/bin/sysinfo.elf"},
+};
+#define NUM_LAUNCHERS ((int)(sizeof(g_launchers) / sizeof(g_launchers[0])))
+
+#define LAUNCHER_ICON_W  90
+#define LAUNCHER_ICON_H  36
+#define LAUNCHER_GAP     8
+#define LAUNCHER_START_X 16
+#define LAUNCHER_START_Y 16
+#define LAUNCHER_BG      0x33334a
+#define LAUNCHER_BORDER  0x1a1a22
+#define LAUNCHER_TEXT    0xffffff
+
+#define TASKBAR_EXIT_W   70
 
 typedef struct {
     int head, tail, count;
@@ -311,6 +353,68 @@ static void win_draw_glyph(uint32_t *buf, int buf_w, int buf_h, int x, int y, in
     }
 }
 
+// ===== Ярлыки запуска на рабочем столе =====
+
+// См. комментарий у g_launch_argv в бывшем desktop.c (удалён) — argv[]
+// ОБЯЗАН жить в static/global памяти, не на стеке: launch_app() зовётся
+// из глубины событийного цикла main(), короткий стековый массив рядом с
+// верхом 16KB пользовательского стека не проходит фиксированную проверку
+// диапазона в copy_user_string_array() (kernel/system/syscall/syscall.c).
+static char *g_launch_argv[2];
+
+static void launch_app(const char *path) {
+    long pid = sys_fork();
+    if (pid < 0) return;
+    if (pid == 0) {
+        // fork() дублирует ВЕСЬ образ WM (окна, compositor-буфer, mailbox —
+        // process_create() внутри fork() заводит ребёнку свой, пустой, см.
+        // process.h) — ничего из этого ребёнку не нужно, он немедленно
+        // заменяет себя целевым приложением; тот же paттерн, что уже
+        // использовал desktop.c и использует shell.c для любой команды.
+        g_launch_argv[0] = (char *)path;
+        g_launch_argv[1] = 0;
+        sys_exec(path, g_launch_argv, (char **)0);
+        sys_exit(127); // sys_exec не возвращается при успехе
+    }
+}
+
+static int launcher_rect(int i, int *x, int *y) {
+    if (i < 0 || i >= NUM_LAUNCHERS) return 0;
+    *x = LAUNCHER_START_X;
+    *y = LAUNCHER_START_Y + i * (LAUNCHER_ICON_H + LAUNCHER_GAP);
+    return 1;
+}
+
+// Клик по рабочему столу, который не задел ни одно окно, — проверяем
+// ярлыки. Возвращает 1 (и уже запускает приложение), если клик попал в
+// ярлык, иначе 0.
+static int try_launch_desktop_icon(int mx, int my) {
+    for (int i = 0; i < NUM_LAUNCHERS; i++) {
+        int x, y;
+        launcher_rect(i, &x, &y);
+        if (mx >= x && mx < x + LAUNCHER_ICON_W && my >= y && my < y + LAUNCHER_ICON_H) {
+            launch_app(g_launchers[i].path);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Кнопка "Exit" — зафиксирована в правом краю таскбара (всегда видна,
+// независимо от числа открытых окон). Без неё, раз рабочий стол теперь
+// отрисовывается ПОСТОЯННО (см. main()), не было бы способа вернуться к
+// текстовой консоли вообще — ни один настоящий оконный менеджер не
+// обходится без способа завершить сессию. Клик зовёт sys_exit() самого
+// WM — ядро уже само восстанавливает текстовую консоль, когда
+// завершается ИМЕННО зарегистрированный WM pid (см. process_exit(),
+// kernel/system/process/process.c).
+static void exit_button_rect(int *x, int *y, int *w, int *h) {
+    *w = TASKBAR_EXIT_W - 8;
+    *h = TASKBAR_HEIGHT - 4;
+    *x = (int)g_screen_w - TASKBAR_EXIT_W;
+    *y = (int)g_screen_h - TASKBAR_HEIGHT + 2;
+}
+
 // ===== Таблица окон / z-order (тот же приём, что был в gui.c) =====
 
 static int outer_w(const wm_window_t *w) { return w->w + 2 * WM_BORDER; }
@@ -373,10 +477,16 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
 
     // Таскбар — отдельный слой НАД окнами (всегда поверх), так что его
     // клики проверяются первыми и дальше не идут к обычному window-hit-
-    // тесту ниже. Виден, только пока есть хоть одно окно (та же причина,
-    // что у g_window_count==0 в handle_kernel_input()/main() — до первого
-    // окна экран принадлежит текстовой консоли целиком).
-    if (going_down && g_window_count > 0 && my >= taskbar_top()) {
+    // тесту ниже. Теперь виден ПОСТОЯННО (не только при открытых окнах) —
+    // в нём живёт кнопка "Exit", без которой не было бы способа вернуться
+    // к текстовой консоли, раз рабочий стол тоже отрисовывается постоянно
+    // (см. main()).
+    if (going_down && my >= taskbar_top()) {
+        int ex, ey, ew, eh;
+        exit_button_rect(&ex, &ey, &ew, &eh);
+        if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
+            sys_exit(0);
+        }
         int btn_idx = mx / TASKBAR_BTN_W;
         if (btn_idx >= 0 && btn_idx < g_window_count) {
             int idx = g_order[btn_idx];
@@ -409,7 +519,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
                 int rel_y = my - (w->y + WM_TITLEBAR_HEIGHT);
                 queue_push(w, LUFIRA_GUI_EVENT_MOUSE_DOWN, rel_x, rel_y, buttons);
             }
-        } else {
+        } else if (!try_launch_desktop_icon(mx, my)) {
             set_focus(-1);
         }
     }
@@ -448,10 +558,35 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
     }
 }
 
+#define CURSOR_H 14
+
+// Залитый треугольник-стрелка (остриё в x,y, диагональ вниз-вправо) +
+// короткая "пятка" вдоль левого края — силуэт классического курсора, не
+// голая диагональная линия.
+static void draw_cursor_shape(int x, int y, uint32_t color) {
+    for (int row = 0; row < CURSOR_H; row++)
+        for (int col = 0; col <= row; col++)
+            fb_set(x + col, y + row, color);
+    for (int row = CURSOR_H; row < CURSOR_H + 4; row++)
+        fb_set(x, y + row, color);
+}
+
+// НАЙДЕННЫЙ БАГ (жалоба пользователя: курсор "бледный и маленький",
+// терялся на светлых окнах) — раньше это была одна белая диагональная
+// линия в 1px. Теперь крупнее (CURSOR_H=14 вместо старых 12, да ещё и
+// ЗАЛИТЫЙ треугольник, не линия) и с чёрной обводкой — силуэт рисуется
+// 9 раз: 8 смещений на 1px по контуру чёрным, затем сам силуэт белым
+// поверх (тот же приём, что и у обводки текста в любом растровом
+// редакторе) — виден и на тёмном рабочем столе, и на белом/светлом фоне
+// окна поверх него.
 static void draw_cursor(int x, int y) {
     uint32_t white = wm_convert_color(0xffffff);
-    for (int i = 0; i < 12; i++) fb_set(x + i, y + i, white);
-    for (int i = 0; i <= 12; i++) fb_set(x, y + i, white);
+    uint32_t black = wm_convert_color(0x000000);
+    static const int offsets[8][2] = {
+        {-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1},
+    };
+    for (int i = 0; i < 8; i++) draw_cursor_shape(x + offsets[i][0], y + offsets[i][1], black);
+    draw_cursor_shape(x, y, white);
 }
 
 static void composite_and_present(void) {
@@ -464,6 +599,29 @@ static void composite_and_present(void) {
     uint32_t white = wm_convert_color(0xffffff);
 
     fb_fill_rect(0, 0, (int)g_screen_w, (int)g_screen_h, desktop_bg);
+
+    // Ярлыки запуска — фоновый слой рабочего стола (НАД заливкой фона, но
+    // ПОД окнами — так их и закрывает открытое поверх окно, как в любой
+    // настоящей системе). См. "Ярлыки запуска на рабочем столе" выше.
+    uint32_t launcher_bg = wm_convert_color(LAUNCHER_BG);
+    uint32_t launcher_border = wm_convert_color(LAUNCHER_BORDER);
+    uint32_t launcher_text = wm_convert_color(LAUNCHER_TEXT);
+    for (int i = 0; i < NUM_LAUNCHERS; i++) {
+        int lx, ly;
+        launcher_rect(i, &lx, &ly);
+        fb_fill_rect(lx, ly, LAUNCHER_ICON_W, LAUNCHER_ICON_H, launcher_border);
+        fb_fill_rect(lx + 1, ly + 1, LAUNCHER_ICON_W - 2, LAUNCHER_ICON_H - 2, launcher_bg);
+
+        const char *label = g_launchers[i].label;
+        int label_len = (int)strlen(label);
+        int ltx = lx + (LAUNCHER_ICON_W - label_len * WM_CHAR_W) / 2;
+        if (ltx < lx + 2) ltx = lx + 2;
+        int lty = ly + (LAUNCHER_ICON_H - WM_CHAR_H) / 2;
+        for (int c = 0; label[c] && ltx + WM_CHAR_W < lx + LAUNCHER_ICON_W - 2; c++) {
+            fb_draw_glyph(ltx, lty, label[c], launcher_text, launcher_bg);
+            ltx += WM_CHAR_W;
+        }
+    }
 
     for (int i = 0; i < g_window_count; i++) {
         wm_window_t *w = &g_windows[g_order[i]];
@@ -514,6 +672,21 @@ static void composite_and_present(void) {
         for (int c = 0; w->title[c] && tx + WM_CHAR_W < bx + TASKBAR_BTN_W - 6; c++) {
             fb_draw_glyph(tx, ty, (unsigned char)w->title[c], taskbar_text, btn_c);
             tx += WM_CHAR_W;
+        }
+    }
+
+    // Кнопка "Exit" — см. комментарий у exit_button_rect() выше.
+    {
+        int ex, ey, ew, eh;
+        exit_button_rect(&ex, &ey, &ew, &eh);
+        uint32_t exit_bg = wm_convert_color(CLOSE_BTN_COLOR);
+        fb_fill_rect(ex, ey, ew, eh, exit_bg);
+        const char *label = "Exit";
+        int etx = ex + (ew - 4 * WM_CHAR_W) / 2;
+        int ety = ey + (eh - WM_CHAR_H) / 2;
+        for (int c = 0; label[c]; c++) {
+            fb_draw_glyph(etx, ety, label[c], taskbar_text, exit_bg);
+            etx += WM_CHAR_W;
         }
     }
 
@@ -588,17 +761,13 @@ static void destroy_window_by_index(int window_id) {
     if (g_focused == window_id) g_focused = (g_window_count > 0) ? g_order[g_window_count - 1] : -1;
     if (g_dragging == window_id) g_dragging = -1;
 
-    if (g_window_count == 0) {
-        // Последнее окно закрыто — экран возвращается к обычной текстовой
-        // консоли (тот же приём, что был в первом срезе gui.c, только
-        // console_redraw_from_history() теперь недостижим напрямую — WM
-        // больше не часть ядра — зовём его через привилегированный
-        // SYS_CONSOLE_REDRAW). "Просто поставить dirty" недостаточно: back
-        // buffer к этому моменту целиком перезаписан GUI-кадрами.
-        sys_console_redraw();
-    } else {
-        g_dirty = 1;
-    }
+    // Этап 4: рабочий стол (фон + ярлыки + таскбар) теперь отрисовывается
+    // ПОСТОЯННО, не только пока есть окна (см. main()) — закрытие
+    // последнего окна просто обнажает пустой рабочий стол, как и
+    // закрытие любого другого; отдельного возврата к текстовой консоли
+    // тут больше не нужно (её восстанавливает сам кернел — process_exit(),
+    // process.c — когда завершается САМ WM, см. кнопку "Exit" ниже).
+    g_dirty = 1;
 }
 
 static void do_win_destroy(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
@@ -711,20 +880,14 @@ static void handle_client_request(uint32_t sender_pid, const struct wm_request *
 
 static void handle_kernel_input(const struct wm_request *req) {
     if (req->opcode == WM_INPUT_KEY) {
-        // НАЙДЕННЫЙ БАГ (живое тестирование: сразу после SYS_WM_REGISTER
-        // шелл переставал принимать ЛЮБОЙ ввод, набрать команду для
-        // запуска ПЕРВОГО GUI-приложения оказывалось физически
-        // невозможно) — ядро безусловно отдаёт клавиатуру нам (input.c),
-        // как только мы зарегистрированы, НЕЗАВИСИМО от того, есть ли
-        // хоть одно окно. Пока окон 0 — возвращаем байт обратно в
-        // консоль (SYS_CONSOLE_INJECT) вместо того, чтобы тихо его
-        // проглатывать: тот же эффект, что у gui_handle_key() в первом
-        // срезе, где gui_mode_active() (== window_count>0) решала,
-        // перехватывать клавишу или нет.
-        if (g_window_count == 0) {
-            sys_console_inject(req->a[0]);
-            return;
-        }
+        // Этап 4: рабочий стол теперь отрисовывается постоянно (см.
+        // main()) — ядру больше незачем решать, вернуть ли байт в
+        // текстовую консоль (SYS_CONSOLE_INJECT, прежний приём первого
+        // среза): раз экран всегда принадлежит WM, клавиша либо идёт
+        // сфокусированному окну, либо, если фокуса нет, просто
+        // проглатывается — ровно как в любой настоящей оконной системе
+        // (клик по пустому рабочему столу снимает фокус, и печать после
+        // этого никуда не идёт, а не "утекает" куда-то ещё).
         if (g_focused >= 0 && g_windows[g_focused].in_use)
             queue_push(&g_windows[g_focused], LUFIRA_GUI_EVENT_KEY, 0, 0, req->a[0]);
         return;
@@ -768,11 +931,11 @@ int main(void) {
 
     load_wm_state(); // этап 3, персистентность — см. WM_STATE_PATH выше
 
-    // НЕ рисуем рабочий стол здесь: до первого sys_win_create() экран
-    // обязан оставаться самой обычной текстовой консолью (см. комментарий
-    // у g_window_count==0 в handle_kernel_input()/do_win_destroy() ниже) —
-    // тот же принцип, что и у gui_tick() в первом срезе ("if
-    // (g_window_count == 0) return;", самая первая строка).
+    // Этап 4: рабочий стол (фон + ярлыки + таскбар) виден СРАЗУ, ещё до
+    // первого sys_win_create() — это и есть то, через что теперь
+    // запускается первое приложение (клик по ярлыку, см. "Ярлыки запуска
+    // на рабочем столе" выше), а не набор команды в текстовой консоли.
+    composite_and_present();
     g_dirty = 0;
 
     for (;;) {
@@ -783,10 +946,7 @@ int main(void) {
         if (msg.sender_pid == WM_SENDER_KERNEL) handle_kernel_input(req);
         else handle_client_request(msg.sender_pid, req);
 
-        // См. тот же "if (g_window_count == 0) return;" в оригинальном
-        // gui_tick() — пока окон нет, нечего ни композитить, ни
-        // презентовать (экран принадлежит текстовой консоли).
-        if (g_dirty && g_window_count > 0) {
+        if (g_dirty) {
             composite_and_present();
             g_dirty = 0;
         }
