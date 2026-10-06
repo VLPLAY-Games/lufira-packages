@@ -244,6 +244,15 @@
       "lpg": "build/write.lpg"
     },
     {
+      "name": "counter_demo",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 14520,
+      "sha256": "096709c68782b6d694d024f857e670eaa0afc8f98c3d0f492b5028845d933604",
+      "lpg": "build/counter_demo.lpg"
+    },
+    {
       "name": "cpuload",
       "version": "1.1.0",
       "category": "user",
@@ -251,6 +260,15 @@
       "size": 14208,
       "sha256": "38a2072b2704b9938847312414b5955da0aebbb2ebbc03764148423bc0469144",
       "lpg": "build/cpuload.lpg"
+    },
+    {
+      "name": "desktop",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 14672,
+      "sha256": "46f667104cc7b815a4ef3a060ddfe6ecb6c3bfcbc35a6b494c262411798795e9",
+      "lpg": "build/desktop.lpg"
     },
     {
       "name": "df",
@@ -271,6 +289,15 @@
       "lpg": "build/du.lpg"
     },
     {
+      "name": "files",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 15848,
+      "sha256": "8e1d8bd09decffa1f40fc0fd5bc786f626cc47c6a0b395dd346cd88afa393b11",
+      "lpg": "build/files.lpg"
+    },
+    {
       "name": "free",
       "version": "1.0.0",
       "category": "user",
@@ -278,6 +305,33 @@
       "size": 14136,
       "sha256": "d6189629728d4ec79352a0ce18462fe10317812e10a61a53af18916933493a82",
       "lpg": "build/free.lpg"
+    },
+    {
+      "name": "notepad",
+      "version": "1.1.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 15184,
+      "sha256": "02487e767f035ab9ce3b9ee33e5e9072fac3dbd9108be0949feed4844a4bf6ed",
+      "lpg": "build/notepad.lpg"
+    },
+    {
+      "name": "text_demo",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 14520,
+      "sha256": "0c8935dd814296cfc39466b0c8b07bc4ae9f9e1a18ae6b5487876245b2c36d3c",
+      "lpg": "build/text_demo.lpg"
+    },
+    {
+      "name": "wm",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 25176,
+      "sha256": "2000519a69f28e3047c4340a30a9809d10140e46f47471c554d9d822df9eb43a",
+      "lpg": "build/wm.lpg"
     }
   ]
 }
