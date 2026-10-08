@@ -419,8 +419,34 @@ static void win_draw_glyph(uint32_t *buf, int buf_w, int buf_h, int x, int y, in
 // диапазона в copy_user_string_array() (kernel/system/syscall/syscall.c).
 static char *g_launch_argv[2];
 
+// ВРЕМЕННАЯ диагностика (репорт: второе приложение из ярлыка не
+// открывается, когда уже открыто одно) — лог в файл, независимый от
+// GUI/IPC. Снять после диагностики.
+static void dbg_log(const char *msg) {
+    long fd = sys_open("/wm2_dbg.log", O_WRONLY | O_CREAT | O_APPEND, 0666);
+    if (fd < 0) return;
+    sys_write((int)fd, msg, (unsigned long)strlen(msg));
+    sys_close((int)fd);
+}
+
+static void dbg_log_num(const char *prefix, long v) {
+    char line[64]; int n = 0;
+    while (*prefix) line[n++] = *prefix++;
+    char tmp[24]; int tn = 0;
+    int neg = v < 0; unsigned long uv = neg ? (unsigned long)(-v) : (unsigned long)v;
+    if (uv == 0) tmp[tn++] = '0';
+    while (uv > 0) { tmp[tn++] = (char)('0' + (uv % 10)); uv /= 10; }
+    if (neg) line[n++] = '-';
+    while (tn > 0) line[n++] = tmp[--tn];
+    line[n++] = '\n';
+    line[n] = '\0';
+    dbg_log(line);
+}
+
 static void launch_app(const char *path) {
+    dbg_log("launch_app: "); dbg_log(path); dbg_log("\n");
     long pid = sys_fork();
+    dbg_log_num("launch_app: fork()=", pid);
     if (pid < 0) return;
     if (pid == 0) {
         // fork() дублирует ВЕСЬ образ WM (окна, compositor-буфer, mailbox —
@@ -430,7 +456,8 @@ static void launch_app(const char *path) {
         // использовал desktop.c и использует shell.c для любой команды.
         g_launch_argv[0] = (char *)path;
         g_launch_argv[1] = 0;
-        sys_exec(path, g_launch_argv, (char **)0);
+        long er = sys_exec(path, g_launch_argv, (char **)0);
+        dbg_log_num("launch_app: CHILD exec FAILED er=", er);
         sys_exit(127); // sys_exec не возвращается при успехе
     }
 }
@@ -1091,12 +1118,14 @@ static void present_frame(int full) {
 // ===== Обработка клиентских RPC-запросов (WM_OP_WIN_*, wm_protocol.h) =====
 
 static void do_win_create(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
+    dbg_log_num("do_win_create: owner_pid=", (long)owner_pid);
     int x = req->a[0], y = req->a[1], w = req->a[2], h = req->a[3];
     if (w <= 0 || h <= 0 || w > 4096 || h > 4096 || g_window_count >= WM_MAX_WINDOWS) {
+        dbg_log("do_win_create: REJECTED bad size/count\n");
         rep->result = -1; return;
     }
     int idx = find_free_slot();
-    if (idx < 0) { rep->result = -1; return; }
+    if (idx < 0) { dbg_log("do_win_create: REJECTED no free slot\n"); rep->result = -1; return; }
 
     uint32_t *pixels = (uint32_t *)malloc((size_t)w * (size_t)h * sizeof(uint32_t));
     if (!pixels) { rep->result = -1; return; }
@@ -1135,6 +1164,7 @@ static void do_win_create(uint32_t owner_pid, const struct wm_request *req, stru
     set_focus(idx);
     g_content_dirty = 1;
     rep->result = idx;
+    dbg_log_num("do_win_create: OK idx=", (long)idx);
 }
 
 // Общее тело закрытия окна — переиспользуется и штатным WM_OP_WIN_DESTROY
