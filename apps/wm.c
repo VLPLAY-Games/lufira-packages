@@ -48,12 +48,32 @@
 #define WM_CHAR_H           8
 #define WM_EVENT_QUEUE_SIZE 32
 
+// Пользователь явно попросил "расширять окно... разворачивать на весь
+// экран и сворачивать, как в обычных ОС" — три новых элемента титлбара
+// (minimize/maximize/close, тот же порядок, что и в Windows) и ресайз за
+// нижний/правый край+угол окна. Кнопки в один ряд, каждая WM_CLOSE_BTN_SIZE
+// (историческое имя — теперь это просто "размер квадратной кнопки
+// титлбара"), с небольшим зазором между ними.
+#define WM_TITLEBAR_BTN_GAP 2
+// Толщина "хватательной" зоны вдоль нижнего/правого края окна, где клик
+// запускает ресайз вместо обычного mouse-down клиенту — достаточно узкая,
+// чтобы не мешать кликам по содержимому окна у самого края, но достаточно
+// широкая, чтобы в неё реально было легко попасть мышью.
+#define WM_RESIZE_GRIP      8
+// Нижний предел размера клиентской области — не даём утащить окно в 0x0
+// (и своей пиксельной arithmetic в compositor'е, и элементарно юзабельно:
+// меньше титлбара с кнопками оно всё равно быть не может).
+#define WM_MIN_WIN_W        120
+#define WM_MIN_WIN_H        80
+
 #define DESKTOP_BG        0x2b2b3a
 #define TITLEBAR_ACTIVE   0x3a6ea5
 #define TITLEBAR_INACTIVE 0x4a4a55
+#define TITLEBAR_BTN_BG   0x3a3a52
 #define BORDER_COLOR      0x1a1a22
 #define TITLE_TEXT_COLOR  0xffffff
 #define CLOSE_BTN_COLOR   0xcc4444
+#define RESIZE_GRIP_COLOR 0x8888aa
 
 // Этап 3, "таскбар" — постоянная полоса снизу экрана, кнопка на каждое
 // открытое окно (не отдельное окно само по себе — просто ещё один слой
@@ -124,6 +144,9 @@ typedef struct {
     char title[WM_TITLE_MAX];
     uint32_t *pixels;      // malloc'd, w*h, уже wm_convert_color()'нутые пиксели
     wm_event_queue_t events;
+    int minimized;          // скрыто с рабочего стола, но кнопка в таскбаре осталась
+    int maximized;           // растянуто на весь рабочий стол (до таскбара)
+    int restore_x, restore_y, restore_w, restore_h; // геометрия ДО maximize — для restore; валидны только пока maximized
 } wm_window_t;
 
 static wm_window_t g_windows[WM_MAX_WINDOWS];
@@ -132,6 +155,17 @@ static int g_window_count = 0;
 static int g_focused = -1;
 static int g_dragging = -1;
 static int g_drag_off_x = 0, g_drag_off_y = 0;
+
+// Ресайз за край/угол окна — тот же приём, что и у g_dragging (один
+// активный ресайз одновременно, индекс в g_windows или -1), но со своим
+// состоянием: считаем новый размер от ЗАФИКСИРОВАННОГО в момент
+// mouse-down размера + дельта текущей позиции мыши от стартовой, а не
+// накопительно от кадра к кадру — иначе дробление мыши туда-сюда/потеря
+// событий дрейфовали бы итоговый размер.
+static int g_resizing = -1;
+static int g_resize_edge_right = 0, g_resize_edge_bottom = 0;
+static int g_resize_start_mx = 0, g_resize_start_my = 0;
+static int g_resize_start_w = 0, g_resize_start_h = 0;
 
 // НАЙДЕННЫЙ БАГ (жалоба пользователя: WM грузит CPU под 100%, особенно
 // при движении мыши/печати, кулер шумит) — раньше тут был ОДИН флаг
@@ -435,6 +469,114 @@ static void exit_button_rect(int *x, int *y, int *w, int *h) {
 static int outer_w(const wm_window_t *w) { return w->w + 2 * WM_BORDER; }
 static int outer_h(const wm_window_t *w) { return w->h + WM_TITLEBAR_HEIGHT + WM_BORDER; }
 
+// Реаллоцирует пиксельный буфер окна под новый размер клиентской области,
+// сохраняя пересекающуюся область (верхний левый угол) как есть — при
+// увеличении новая полоса справа/снизу просто чёрная (как и при
+// sys_win_create(), см. memset там), при уменьшении лишнее обрезается.
+// Благодаря этому restore после maximize() даёт ТОЧНО тот же вид, что был
+// до него (исходная область никогда не трогалась, просто временно
+// "перекрывалась" большим буфером) — отдельно сохранять старые пиксели не
+// нужно. Не шлёт LUFIRA_GUI_EVENT_RESIZE и не трогает g_content_dirty —
+// это дело вызывающего (разным путям ресайза нужны разные доп. действия).
+static void resize_window_buffer(wm_window_t *w, int new_w, int new_h) {
+    if (new_w < 1) new_w = 1;
+    if (new_h < 1) new_h = 1;
+    if (new_w == w->w && new_h == w->h) return;
+
+    uint32_t *new_pixels = (uint32_t *)malloc((size_t)new_w * (size_t)new_h * sizeof(uint32_t));
+    if (!new_pixels) return; // ОЗУ кончилась — оставляем старый размер как есть
+    memset(new_pixels, 0, (size_t)new_w * (size_t)new_h * sizeof(uint32_t));
+
+    int copy_w = new_w < w->w ? new_w : w->w;
+    int copy_h = new_h < w->h ? new_h : w->h;
+    for (int row = 0; row < copy_h; row++) {
+        memcpy(new_pixels + (size_t)row * new_w,
+               w->pixels + (size_t)row * w->w,
+               (size_t)copy_w * sizeof(uint32_t));
+    }
+
+    free(w->pixels);
+    w->pixels = new_pixels;
+    w->w = new_w;
+    w->h = new_h;
+}
+
+// Хватательная зона для ресайза — правая/нижняя WM_RESIZE_GRIP-полоса
+// ВНЕШНЕЙ рамки окна (но не за её пределами — вызывающий уже убедился, что
+// mx/my внутри outer_w()/outer_h() через find_window_at()). Угол
+// засчитывается за оба края разом (edge_right И edge_bottom), так что
+// таскание из угла меняет и ширину, и высоту одновременно, как и положено.
+// Недоступно для maximized-окна — растягивать "от упора" уже некуда.
+static int in_resize_zone(const wm_window_t *w, int mx, int my, int *edge_right, int *edge_bottom) {
+    if (w->maximized) return 0;
+    int ow = outer_w(w), oh = outer_h(w);
+    int right = (mx >= w->x + ow - WM_RESIZE_GRIP);
+    int bottom = (my >= w->y + oh - WM_RESIZE_GRIP);
+    if (!right && !bottom) return 0;
+    *edge_right = right;
+    *edge_bottom = bottom;
+    return 1;
+}
+
+// Общая геометрия трёх кнопок титлбара (minimize/maximize/close, слева
+// направо в этом порядке — тот же порядок, что и в Windows) — ОДНА точка
+// правды для рисования (composite_scene()) и хит-теста
+// (handle_mouse_transition()), чтобы они никогда не разъехались.
+static void titlebar_button_rects(const wm_window_t *w, int *min_x, int *max_x, int *close_x,
+                                   int *btn_y, int *btn_size) {
+    *btn_size = WM_CLOSE_BTN_SIZE;
+    *btn_y = w->y + (WM_TITLEBAR_HEIGHT - WM_CLOSE_BTN_SIZE) / 2;
+    *close_x = w->x + outer_w(w) - WM_BORDER - WM_CLOSE_BTN_SIZE - 2;
+    *max_x = *close_x - WM_CLOSE_BTN_SIZE - WM_TITLEBAR_BTN_GAP;
+    *min_x = *max_x - WM_CLOSE_BTN_SIZE - WM_TITLEBAR_BTN_GAP;
+}
+
+// Простые векторные иконки (та же идея, что у курсора — fb_fill_rect()
+// прямо по экранным координатам, не битмап-глиф): подчёркивание для
+// minimize, квадрат-контур для maximize, два перекрывающихся квадрата-
+// контура для restore (maximized == уже развёрнуто, клик вернёт обратно).
+static void draw_titlebar_icon_minimize(int bx, int by, int bs, uint32_t color) {
+    int lw = 8;
+    int lx = bx + (bs - lw) / 2;
+    int ly = by + bs - 5;
+    fb_fill_rect(lx, ly, lw, 2, color);
+}
+
+static void draw_square_outline(int sx, int sy, int sz, uint32_t color) {
+    fb_fill_rect(sx, sy, sz, 2, color);
+    fb_fill_rect(sx, sy + sz - 2, sz, 2, color);
+    fb_fill_rect(sx, sy, 2, sz, color);
+    fb_fill_rect(sx + sz - 2, sy, 2, sz, color);
+}
+
+static void draw_titlebar_icon_maxrestore(int bx, int by, int bs, uint32_t color, int maximized) {
+    if (!maximized) {
+        int sz = 9;
+        draw_square_outline(bx + (bs - sz) / 2, by + (bs - sz) / 2, sz, color);
+    } else {
+        int sz = 7, off = 3;
+        int sx = bx + (bs - sz) / 2 - off / 2;
+        int sy = by + (bs - sz) / 2 - off / 2;
+        draw_square_outline(sx + off, sy, sz, color);
+        draw_square_outline(sx, sy + off, sz, color);
+    }
+}
+
+// Небольшая диагональная "ручка" в правом нижнем углу рамки — чисто
+// визуальная подсказка, что оттуда можно тащить ресайз (хватательная зона
+// сама по себе invisible, WM_RESIZE_GRIP). Скрыта для maximized-окна — там
+// ресайза всё равно нет (см. in_resize_zone()).
+static void draw_resize_grip(const wm_window_t *w) {
+    if (w->maximized) return;
+    uint32_t c = wm_convert_color(RESIZE_GRIP_COLOR);
+    int bx = w->x + outer_w(w) - 2;
+    int by = w->y + outer_h(w) - 2;
+    for (int d = 2; d <= 8; d += 3) {
+        fb_set(bx - d, by, c);
+        fb_set(bx, by - d, c);
+    }
+}
+
 static int find_free_slot(void) {
     for (int i = 0; i < WM_MAX_WINDOWS; i++) if (!g_windows[i].in_use) return i;
     return -1;
@@ -451,7 +593,7 @@ static int find_window_at(int px, int py) {
     for (int i = g_window_count - 1; i >= 0; i--) {
         int idx = g_order[i];
         wm_window_t *w = &g_windows[idx];
-        if (!w->in_use) continue;
+        if (!w->in_use || w->minimized) continue; // свёрнутое окно не кликабельно на рабочем столе — только через таскбар
         if (px >= w->x && px < w->x + outer_w(w) &&
             py >= w->y && py < w->y + outer_h(w))
             return idx;
@@ -486,6 +628,48 @@ static void queue_push(wm_window_t *w, int type, int x, int y, int key_or_button
 
 static int taskbar_top(void) { return (int)g_screen_h - TASKBAR_HEIGHT; }
 
+// Maximize/restore — та же пара "сохранить старую геометрию / вернуть её",
+// что уже umeet update_saved_pos() на диске, только здесь живёт прямо в
+// окне (restore_*) и обратимо в рамках одной сессии, без файла. Клиент
+// получает LUFIRA_GUI_EVENT_RESIZE с новым w/h (необязательно его слушать,
+// см. комментарий у константы, syscall.h), и финальная геометрия сразу
+// персистится — тот же update_saved_pos(), что и у обычного таскания за
+// титлбар.
+static void toggle_maximize(wm_window_t *w) {
+    if (!w->maximized) {
+        w->restore_x = w->x; w->restore_y = w->y;
+        w->restore_w = w->w; w->restore_h = w->h;
+        w->maximized = 1;
+        w->x = 0; w->y = 0;
+        int new_w = (int)g_screen_w - 2 * WM_BORDER;
+        int new_h = taskbar_top() - WM_TITLEBAR_HEIGHT - WM_BORDER;
+        if (new_w < WM_MIN_WIN_W) new_w = WM_MIN_WIN_W;
+        if (new_h < WM_MIN_WIN_H) new_h = WM_MIN_WIN_H;
+        resize_window_buffer(w, new_w, new_h);
+    } else {
+        w->maximized = 0;
+        w->x = w->restore_x; w->y = w->restore_y;
+        resize_window_buffer(w, w->restore_w, w->restore_h);
+    }
+    queue_push(w, LUFIRA_GUI_EVENT_RESIZE, w->w, w->h, 0);
+    update_saved_pos(w->title, w->x, w->y, w->w, w->h);
+    g_content_dirty = 1;
+}
+
+// Сворачивание не трогает геометрию вовсе — окно просто перестаёт
+// рисоваться и кликаться на рабочем столе (см. composite_scene()/
+// find_window_at()), но остаётся в g_order и его кнопка остаётся в
+// таскбаре (единственный способ развернуть обратно, см. hit-тест таскбара
+// ниже) — ровно та же модель, что и в Windows.
+static void minimize_window(int idx) {
+    wm_window_t *w = &g_windows[idx];
+    w->minimized = 1;
+    if (g_focused == idx) g_focused = -1;
+    if (g_dragging == idx) g_dragging = -1;
+    if (g_resizing == idx) g_resizing = -1;
+    g_content_dirty = 1;
+}
+
 static void handle_mouse_transition(int mx, int my, int buttons) {
     int going_down = (buttons & 1) && !(g_prev_buttons & 1);
     int going_up = !(buttons & 1) && (g_prev_buttons & 1);
@@ -505,8 +689,22 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         int btn_idx = mx / TASKBAR_BTN_W;
         if (btn_idx >= 0 && btn_idx < g_window_count) {
             int idx = g_order[btn_idx];
-            raise_to_top(idx);
-            set_focus(idx);
+            wm_window_t *tw = &g_windows[idx];
+            if (tw->minimized) {
+                // Свёрнуто — клик по кнопке таскбара это и есть единственный
+                // способ развернуть обратно (см. minimize_window()).
+                tw->minimized = 0;
+                raise_to_top(idx);
+                set_focus(idx);
+            } else if (g_focused == idx) {
+                // Уже сфокусировано и видно — повторный клик по его же
+                // кнопке таскбара сворачивает (тот же toggle, что в Windows:
+                // клик по активной задаче в панели задач прячет её).
+                minimize_window(idx);
+            } else {
+                raise_to_top(idx);
+                set_focus(idx);
+            }
             g_content_dirty = 1;
         }
         return;
@@ -520,19 +718,41 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
             set_focus(idx);
             g_content_dirty = 1;
 
-            int close_x = w->x + outer_w(w) - WM_BORDER - WM_CLOSE_BTN_SIZE - 2;
-            int close_y = w->y + (WM_TITLEBAR_HEIGHT - WM_CLOSE_BTN_SIZE) / 2;
-            if (mx >= close_x && mx < close_x + WM_CLOSE_BTN_SIZE &&
-                my >= close_y && my < close_y + WM_CLOSE_BTN_SIZE) {
+            int min_x, max_x, close_x, btn_y, btn_size;
+            titlebar_button_rects(w, &min_x, &max_x, &close_x, &btn_y, &btn_size);
+            int in_titlebar = my < w->y + WM_TITLEBAR_HEIGHT;
+
+            if (in_titlebar && mx >= close_x && mx < close_x + btn_size &&
+                my >= btn_y && my < btn_y + btn_size) {
                 queue_push(w, LUFIRA_GUI_EVENT_CLOSE, 0, 0, 0);
-            } else if (my < w->y + WM_TITLEBAR_HEIGHT) {
-                g_dragging = idx;
-                g_drag_off_x = mx - w->x;
-                g_drag_off_y = my - w->y;
+            } else if (in_titlebar && mx >= max_x && mx < max_x + btn_size &&
+                       my >= btn_y && my < btn_y + btn_size) {
+                toggle_maximize(w);
+            } else if (in_titlebar && mx >= min_x && mx < min_x + btn_size &&
+                       my >= btn_y && my < btn_y + btn_size) {
+                minimize_window(idx);
+            } else if (in_titlebar) {
+                // Таскание maximized-окна за титлбар намеренно отключено —
+                // "развёрнутое" окно в этой версии не плавает произвольно,
+                // сначала restore (кнопка maximize ещё раз), потом таскать.
+                if (!w->maximized) {
+                    g_dragging = idx;
+                    g_drag_off_x = mx - w->x;
+                    g_drag_off_y = my - w->y;
+                }
             } else {
-                int rel_x = mx - (w->x + WM_BORDER);
-                int rel_y = my - (w->y + WM_TITLEBAR_HEIGHT);
-                queue_push(w, LUFIRA_GUI_EVENT_MOUSE_DOWN, rel_x, rel_y, buttons);
+                int edge_right = 0, edge_bottom = 0;
+                if (in_resize_zone(w, mx, my, &edge_right, &edge_bottom)) {
+                    g_resizing = idx;
+                    g_resize_edge_right = edge_right;
+                    g_resize_edge_bottom = edge_bottom;
+                    g_resize_start_mx = mx; g_resize_start_my = my;
+                    g_resize_start_w = w->w; g_resize_start_h = w->h;
+                } else {
+                    int rel_x = mx - (w->x + WM_BORDER);
+                    int rel_y = my - (w->y + WM_TITLEBAR_HEIGHT);
+                    queue_push(w, LUFIRA_GUI_EVENT_MOUSE_DOWN, rel_x, rel_y, buttons);
+                }
             }
         } else if (!try_launch_desktop_icon(mx, my)) {
             set_focus(-1);
@@ -549,6 +769,17 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
             update_saved_pos(w->title, w->x, w->y, w->w, w->h);
         }
         g_dragging = -1;
+
+        // Та же логика персистентности, что и у драга — пишем на диск один
+        // раз, когда реально отпустили кнопку, не на каждый промежуточный
+        // тик ресайза.
+        int was_resizing = (g_resizing >= 0);
+        if (was_resizing) {
+            wm_window_t *w = &g_windows[g_resizing];
+            update_saved_pos(w->title, w->x, w->y, w->w, w->h);
+        }
+        g_resizing = -1;
+
         if (g_focused >= 0 && g_windows[g_focused].in_use) {
             wm_window_t *w = &g_windows[g_focused];
             int rel_x = mx - (w->x + WM_BORDER);
@@ -568,6 +799,30 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         if (ny + outer_h(w) > max_y) ny = max_y - outer_h(w);
         if (nx != w->x || ny != w->y) {
             w->x = nx; w->y = ny;
+            g_content_dirty = 1;
+        }
+    }
+
+    if (g_resizing >= 0 && (buttons & 1)) {
+        wm_window_t *w = &g_windows[g_resizing];
+        int new_w = w->w, new_h = w->h;
+        // Дельта от ЗАФИКСИРОВАННОГО на mouse-down размера — см.
+        // комментарий у g_resize_start_* выше, не накопительно.
+        if (g_resize_edge_right) new_w = g_resize_start_w + (mx - g_resize_start_mx);
+        if (g_resize_edge_bottom) new_h = g_resize_start_h + (my - g_resize_start_my);
+        if (new_w < WM_MIN_WIN_W) new_w = WM_MIN_WIN_W;
+        if (new_h < WM_MIN_WIN_H) new_h = WM_MIN_WIN_H;
+        // Внешняя рамка не должна вылезать за экран/под таскбар.
+        if (w->x + new_w + 2 * WM_BORDER > (int)g_screen_w)
+            new_w = (int)g_screen_w - w->x - 2 * WM_BORDER;
+        if (w->y + new_h + WM_TITLEBAR_HEIGHT + WM_BORDER > taskbar_top())
+            new_h = taskbar_top() - w->y - WM_TITLEBAR_HEIGHT - WM_BORDER;
+        if (new_w < WM_MIN_WIN_W) new_w = WM_MIN_WIN_W;
+        if (new_h < WM_MIN_WIN_H) new_h = WM_MIN_WIN_H;
+
+        if (new_w != w->w || new_h != w->h) {
+            resize_window_buffer(w, new_w, new_h);
+            queue_push(w, LUFIRA_GUI_EVENT_RESIZE, w->w, w->h, 0);
             g_content_dirty = 1;
         }
     }
@@ -615,6 +870,7 @@ static void composite_scene(void) {
     uint32_t titlebar_inactive = wm_convert_color(TITLEBAR_INACTIVE);
     uint32_t title_text = wm_convert_color(TITLE_TEXT_COLOR);
     uint32_t close_btn = wm_convert_color(CLOSE_BTN_COLOR);
+    uint32_t titlebar_btn_c = wm_convert_color(TITLEBAR_BTN_BG);
     uint32_t white = wm_convert_color(0xffffff);
 
     fb_fill_rect(0, 0, (int)g_screen_w, (int)g_screen_h, desktop_bg);
@@ -644,7 +900,7 @@ static void composite_scene(void) {
 
     for (int i = 0; i < g_window_count; i++) {
         wm_window_t *w = &g_windows[g_order[i]];
-        if (!w->in_use) continue;
+        if (!w->in_use || w->minimized) continue; // свёрнутое — только кнопка в таскбаре, см. ниже
 
         int is_focused = (g_order[i] == g_focused);
         int ow = outer_w(w), oh = outer_h(w);
@@ -653,19 +909,25 @@ static void composite_scene(void) {
         fb_fill_rect(w->x, w->y, ow, oh, border_c);
         fb_fill_rect(w->x + WM_BORDER, w->y, w->w, WM_TITLEBAR_HEIGHT, titlebar_c);
 
+        int min_x, max_x, close_x, btn_y, btn_size;
+        titlebar_button_rects(w, &min_x, &max_x, &close_x, &btn_y, &btn_size);
+
         int tx = w->x + WM_BORDER + 4;
         int ty = w->y + (WM_TITLEBAR_HEIGHT - WM_CHAR_H) / 2;
-        for (int c = 0; w->title[c] && tx + WM_CHAR_W < w->x + ow - WM_CLOSE_BTN_SIZE - 6; c++) {
+        for (int c = 0; w->title[c] && tx + WM_CHAR_W < min_x - 4; c++) {
             fb_draw_glyph(tx, ty, (unsigned char)w->title[c], title_text, titlebar_c);
             tx += WM_CHAR_W;
         }
 
-        int close_x = w->x + ow - WM_BORDER - WM_CLOSE_BTN_SIZE - 2;
-        int close_y = w->y + (WM_TITLEBAR_HEIGHT - WM_CLOSE_BTN_SIZE) / 2;
-        fb_fill_rect(close_x, close_y, WM_CLOSE_BTN_SIZE, WM_CLOSE_BTN_SIZE, close_btn);
-        fb_draw_glyph(close_x + 4, close_y + 4, 'X', white, close_btn);
+        fb_fill_rect(min_x, btn_y, btn_size, btn_size, titlebar_btn_c);
+        draw_titlebar_icon_minimize(min_x, btn_y, btn_size, white);
+        fb_fill_rect(max_x, btn_y, btn_size, btn_size, titlebar_btn_c);
+        draw_titlebar_icon_maxrestore(max_x, btn_y, btn_size, white, w->maximized);
+        fb_fill_rect(close_x, btn_y, btn_size, btn_size, close_btn);
+        fb_draw_glyph(close_x + 4, btn_y + 4, 'X', white, close_btn);
 
         fb_blit(w->x + WM_BORDER, w->y + WM_TITLEBAR_HEIGHT, w->pixels, w->w, w->h);
+        draw_resize_grip(w);
     }
 
     // Таскбар — см. комментарий у TASKBAR_HEIGHT выше и hit-тест в
@@ -745,6 +1007,11 @@ static void do_win_create(uint32_t owner_pid, const struct wm_request *req, stru
     win->x = x; win->y = y; win->w = w; win->h = h;
     win->pixels = pixels;
     win->events.head = win->events.tail = win->events.count = 0;
+    // Слот переиспользуется после destroy_window_by_index() — тот не чистит
+    // minimized/maximized (ему это ни к чему, он сам занулит in_use), так
+    // что новое окно в старом слоте могло бы родиться уже "свёрнутым".
+    win->minimized = 0;
+    win->maximized = 0;
 
     int n = 0;
     while (req->str[n] && n < WM_TITLE_MAX - 1) { win->title[n] = req->str[n]; n++; }
@@ -791,6 +1058,7 @@ static void destroy_window_by_index(int window_id) {
     }
     if (g_focused == window_id) g_focused = (g_window_count > 0) ? g_order[g_window_count - 1] : -1;
     if (g_dragging == window_id) g_dragging = -1;
+    if (g_resizing == window_id) g_resizing = -1;
 
     // Этап 4: рабочий стол (фон + ярлыки + таскбар) теперь отрисовывается
     // ПОСТОЯННО, не только пока есть окна (см. main()) — закрытие
@@ -925,7 +1193,7 @@ static void handle_kernel_input(const struct wm_request *req) {
     }
     if (req->opcode == WM_INPUT_MOUSE) {
         int mx = req->a[0], my = req->a[1], buttons = req->a[2];
-        if (buttons != g_prev_buttons || g_dragging >= 0) handle_mouse_transition(mx, my, buttons);
+        if (buttons != g_prev_buttons || g_dragging >= 0 || g_resizing >= 0) handle_mouse_transition(mx, my, buttons);
         g_prev_buttons = buttons;
         // Тот же найденный в первом срезе баг/фикс: курсор обязан
         // перерисовываться и на ЧИСТОЕ движение мыши, без смены кнопок —
