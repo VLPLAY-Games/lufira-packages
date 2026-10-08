@@ -320,8 +320,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 15504,
-      "sha256": "53a98d5fdeb5bc8f5a0c3f7f6f366bcde25804b98102ba92f05229dca321ac1a",
+      "size": 19752,
+      "sha256": "1f58dbc4672b1ab4fb726b284d9bddd5a04dbc507b047414fd0ca3dcfa6e3952",
       "lpg": "build/terminal.lpg"
     },
     {
@@ -338,8 +338,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 34848,
-      "sha256": "1867e4583b12d191379d50cdbf9678bb302282a52aab0497e35acc3cea4d2290",
+      "size": 35136,
+      "sha256": "21f8165110c9ec6717558c6ae8759d75829d7e0fafbd22930129ac86dc654d05",
       "lpg": "build/wm.lpg"
     }
   ]

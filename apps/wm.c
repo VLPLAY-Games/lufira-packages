@@ -129,7 +129,35 @@ static const desktop_launcher_t g_launchers[] = {
 #define LAUNCHER_BORDER  0x1a1a22
 #define LAUNCHER_TEXT    0xffffff
 
-#define TASKBAR_EXIT_W   70
+// Этап 5: кнопка "Пуск" (жалоба/запрос пользователя — "надо добавить
+// кнопку пуск слева снизу в панели задач и там 3 кнопки - выйти из gui,
+// выключить и перезагрузиться ну и кнопку exit тогда убрать справа") —
+// занимает левый край таскбара (там, где и в Windows), открывает
+// всплывающее меню из трёх пунктов НАД собой. Старая кнопка "Exit" в
+// правом углу (exit_button_rect() — теперь удалена) заменена первым же
+// пунктом этого меню ("Exit GUI" — тот же sys_exit(0)).
+#define START_BTN_W       70
+#define START_MENU_ITEM_H 26
+#define START_MENU_W      150
+#define START_MENU_BG     0x2a2a3c
+
+typedef struct {
+    const char *label;
+} start_menu_item_t;
+
+// Порядок — как попросил пользователь: "выйти из gui, выключить,
+// перезагрузиться". do_start_menu_action() ниже индексирует этот же
+// массив по порядковому номеру пункта.
+static const start_menu_item_t g_start_menu_items[] = {
+    {"Exit GUI"},
+    {"Shutdown"},
+    {"Reboot"},
+};
+#define NUM_START_MENU_ITEMS ((int)(sizeof(g_start_menu_items) / sizeof(g_start_menu_items[0])))
+
+// Открыто/закрыто — один флаг, то же меню рисуется ПОВЕРХ всего (окон,
+// таскбара), как и курсор, см. composite_scene()/present_frame().
+static int g_start_menu_open = 0;
 
 typedef struct {
     int head, tail, count;
@@ -484,19 +512,45 @@ static int try_launch_desktop_icon(int mx, int my) {
     return 0;
 }
 
-// Кнопка "Exit" — зафиксирована в правом краю таскбара (всегда видна,
-// независимо от числа открытых окон). Без неё, раз рабочий стол теперь
-// отрисовывается ПОСТОЯННО (см. main()), не было бы способа вернуться к
-// текстовой консоли вообще — ни один настоящий оконный менеджер не
-// обходится без способа завершить сессию. Клик зовёт sys_exit() самого
-// WM — ядро уже само восстанавливает текстовую консоль, когда
-// завершается ИМЕННО зарегистрированный WM pid (см. process_exit(),
-// kernel/system/process/process.c).
-static void exit_button_rect(int *x, int *y, int *w, int *h) {
-    *w = TASKBAR_EXIT_W - 8;
+// Кнопка "Пуск" — зафиксирована в левом краю таскбара (всегда видна,
+// независимо от числа открытых окон) — см. комментарий у START_BTN_W.
+static void start_button_rect(int *x, int *y, int *w, int *h) {
+    *w = START_BTN_W - 8;
     *h = TASKBAR_HEIGHT - 4;
-    *x = (int)g_screen_w - TASKBAR_EXIT_W;
+    *x = 4;
     *y = (int)g_screen_h - TASKBAR_HEIGHT + 2;
+}
+
+// taskbar_top() определена чуть ниже в файле — forward declaration, чтобы
+// start_menu_item_rect() ниже могла её использовать (обе вызываются уже
+// после её определения, handle_mouse_transition()/composite_scene()).
+static int taskbar_top(void);
+
+// Геометрия пункта меню #i (0-based, сверху вниз) — меню растёт ВВЕРХ от
+// кнопки "Пуск" (таскбар внизу экрана, под ним рисовать уже негде).
+static void start_menu_item_rect(int i, int *x, int *y, int *w, int *h) {
+    *w = START_MENU_W;
+    *h = START_MENU_ITEM_H;
+    *x = 0;
+    *y = taskbar_top() - (NUM_START_MENU_ITEMS - i) * START_MENU_ITEM_H;
+}
+
+// Без неё, раз рабочий стол теперь отрисовывается ПОСТОЯННО (см. main()),
+// не было бы способа вернуться к текстовой консоли вообще — ни один
+// настоящий оконный менеджер не обходится без способа завершить сессию.
+// "Exit GUI" зовёт sys_exit() самого WM — ядро уже само восстанавливает
+// текстовую консоль, когда завершается ИМЕННО зарегистрированный WM pid
+// (см. process_exit(), kernel/system/process/process.c). Shutdown/Reboot —
+// те же привилегированные syscall'ы, что у пакетов shutdown.elf/reboot.elf
+// (SYS_SHUTDOWN/SYS_REBOOT, kernel/system/syscall/syscall.h) — WM не
+// отдельный случай, просто уже всегда запущен и под рукой.
+static void do_start_menu_action(int item_index) {
+    switch (item_index) {
+        case 0: sys_exit(0); break;   // Exit GUI
+        case 1: sys_shutdown(); break;
+        case 2: sys_reboot(); break;
+        default: break;
+    }
 }
 
 // ===== Таблица окон / z-order (тот же приём, что был в gui.c) =====
@@ -717,19 +771,57 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
     int going_down = (buttons & 1) && !(g_prev_buttons & 1);
     int going_up = !(buttons & 1) && (g_prev_buttons & 1);
 
+    // Меню "Пуск" — плавает НАД всем (таскбаром и окнами), проверяется
+    // ПЕРВЫМ, пока открыто. Клик по пункту — выполняет действие и
+    // закрывает меню. Клик куда угодно ещё, пока меню открыто, тоже
+    // закрывает его (тот же принцип, что у любого настоящего start-меню:
+    // открытое меню "ловит" следующий клик целиком на закрытие), но ПОСЛЕ
+    // закрытия клик всё равно разбирается обычным путём ниже (например,
+    // клик по окну под меню должен и закрыть меню, и сфокусировать это
+    // окно — иначе пришлось бы кликать дважды).
+    if (going_down && g_start_menu_open) {
+        // Клик именно по самой кнопке "Пуск" пропускаем целиком сюда — его
+        // закрывающе-открывающий toggle уже делает блок таскбара ниже;
+        // если бы мы здесь уже сбросили g_start_menu_open в 0, тот toggle
+        // снова включил бы меню (0 -> 1), и повторный клик по "Пуск" не
+        // закрывал бы его, а казался бы "не работающим".
+        int sx, sy, sw, sh;
+        start_button_rect(&sx, &sy, &sw, &sh);
+        int on_start_btn = (mx >= sx && mx < sx + sw && my >= sy && my < sy + sh);
+
+        if (!on_start_btn) {
+            int handled = 0;
+            for (int i = 0; i < NUM_START_MENU_ITEMS; i++) {
+                int ix, iy, iw, ih;
+                start_menu_item_rect(i, &ix, &iy, &iw, &ih);
+                if (mx >= ix && mx < ix + iw && my >= iy && my < iy + ih) {
+                    do_start_menu_action(i);
+                    handled = 1;
+                    break;
+                }
+            }
+            g_start_menu_open = 0;
+            g_content_dirty = 1;
+            if (handled) return;
+        }
+    }
+
     // Таскбар — отдельный слой НАД окнами (всегда поверх), так что его
     // клики проверяются первыми и дальше не идут к обычному window-hit-
     // тесту ниже. Теперь виден ПОСТОЯННО (не только при открытых окнах) —
-    // в нём живёт кнопка "Exit", без которой не было бы способа вернуться
-    // к текстовой консоли, раз рабочий стол тоже отрисовывается постоянно
+    // в нём живёт кнопка "Пуск" (см. комментарий у START_BTN_W), без
+    // которой не было бы способа вернуться к текстовой консоли/выключить/
+    // перезагрузить машину, раз рабочий стол тоже отрисовывается постоянно
     // (см. main()).
     if (going_down && my >= taskbar_top()) {
-        int ex, ey, ew, eh;
-        exit_button_rect(&ex, &ey, &ew, &eh);
-        if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
-            sys_exit(0);
+        int sx, sy, sw, sh;
+        start_button_rect(&sx, &sy, &sw, &sh);
+        if (mx >= sx && mx < sx + sw && my >= sy && my < sy + sh) {
+            g_start_menu_open = !g_start_menu_open;
+            g_content_dirty = 1;
+            return;
         }
-        int btn_idx = mx / TASKBAR_BTN_W;
+        int btn_idx = (mx - START_BTN_W) / TASKBAR_BTN_W;
         if (btn_idx >= 0 && btn_idx < g_window_count) {
             int idx = g_order[btn_idx];
             wm_window_t *tw = &g_windows[idx];
@@ -994,9 +1086,12 @@ static void composite_scene(void) {
 
     int tb_y = taskbar_top();
     fb_fill_rect(0, tb_y, (int)g_screen_w, TASKBAR_HEIGHT, taskbar_bg);
+    // Кнопки окон теперь начинаются ПОСЛЕ кнопки "Пуск" (см. START_BTN_W) —
+    // левый край таскбара ей уже занят, в отличие от прежней кнопки "Exit"
+    // в правом углу, которая никак не мешала этому ряду.
     for (int i = 0; i < g_window_count; i++) {
         wm_window_t *w = &g_windows[g_order[i]];
-        int bx = i * TASKBAR_BTN_W;
+        int bx = START_BTN_W + i * TASKBAR_BTN_W;
         if (bx >= (int)g_screen_w) break; // не влезло - дальше рисовать некуда
         int bw = TASKBAR_BTN_W - 4;
         if (bx + TASKBAR_BTN_W > (int)g_screen_w) bw = (int)g_screen_w - bx - 4;
@@ -1010,21 +1105,43 @@ static void composite_scene(void) {
         }
     }
 
-    // Кнопка "Exit" — см. комментарий у exit_button_rect() выше.
+    // Кнопка "Пуск" — см. комментарий у START_BTN_W/start_button_rect()
+    // выше. Подсвечена тем же "активным" цветом, что и сфокусированное
+    // окно таскбара, пока меню открыто — обычная обратная связь "эта
+    // кнопка сейчас нажата/активна".
     {
-        int ex, ey, ew, eh;
-        exit_button_rect(&ex, &ey, &ew, &eh);
-        uint32_t exit_bg = wm_convert_color(CLOSE_BTN_COLOR);
-        fb_fill_rect(ex, ey, ew, eh, exit_bg);
-        const char *label = "Exit";
-        int etx = ex + (ew - 4 * WM_CHAR_W) / 2;
-        int ety = ey + (eh - WM_CHAR_H) / 2;
+        int sx, sy, sw, sh;
+        start_button_rect(&sx, &sy, &sw, &sh);
+        uint32_t start_bg = g_start_menu_open ? taskbar_btn_active : taskbar_btn_bg;
+        fb_fill_rect(sx, sy, sw, sh, start_bg);
+        const char *label = "Start";
+        int stx = sx + (sw - 5 * WM_CHAR_W) / 2;
+        int sty = sy + (sh - WM_CHAR_H) / 2;
         for (int c = 0; label[c]; c++) {
-            fb_draw_glyph(etx, ety, label[c], taskbar_text, exit_bg);
-            etx += WM_CHAR_W;
+            fb_draw_glyph(stx, sty, label[c], taskbar_text, start_bg);
+            stx += WM_CHAR_W;
         }
     }
 
+    // Всплывающее меню "Пуск" — рисуется ПОСЛЕДНИМ в этой функции (т.е.
+    // поверх и окон, и таскбара; курсор поверх него рисует уже
+    // present_frame()/draw_cursor() отдельно).
+    if (g_start_menu_open) {
+        uint32_t menu_bg = wm_convert_color(START_MENU_BG);
+        for (int i = 0; i < NUM_START_MENU_ITEMS; i++) {
+            int ix, iy, iw, ih;
+            start_menu_item_rect(i, &ix, &iy, &iw, &ih);
+            fb_fill_rect(ix, iy, iw, ih, menu_bg);
+            const char *label = g_start_menu_items[i].label;
+            int ltx = ix + 10;
+            int lty = iy + (ih - WM_CHAR_H) / 2;
+            for (int c = 0; label[c]; c++) {
+                fb_draw_glyph(ltx, lty, label[c], taskbar_text, menu_bg);
+                ltx += WM_CHAR_W;
+            }
+            if (i > 0) fb_fill_rect(ix, iy, iw, 1, wm_convert_color(0x1a1a22));
+        }
+    }
 }
 
 static void cursor_bbox(int cx, int cy, int *x0, int *y0, int *x1, int *y1) {
@@ -1364,6 +1481,24 @@ static void dispatch_message(const struct lufira_ipc_msg *msg) {
 // пачки вместо того, чтобы пересобирать сцену на каждое из них.
 #define COALESCE_WAIT_MS 20
 
+// НАЙДЕННЫЙ БАГ (жалоба пользователя: "выполняю команду в терминале в
+// gui — всё зависает, пока команда не выполнится"): цикл ниже раньше
+// коалесцировал БЕЗ ограничения по суммарному времени — пока сообщения
+// продолжали приходить с паузой короче COALESCE_WAIT_MS, composite_scene()/
+// present_frame() не вызывались вовсе. Terminal.c перечитывает вывод
+// команды и шлёт новую пачку draw-RPC каждые ~16мс (sys_msleep(16) в его
+// главном цикле) — короче 20мс порога, так что пока команда печатает
+// вывод (ls с большим листингом, любой цикл с частым printf), WM
+// бесконечно оставался внутри этого while и НИ РАЗУ не презентовал кадр:
+// ни новый текст на экране, ни даже положение курсора мыши не
+// обновлялись (мышь физически "не ехала") до самого конца вывода
+// команды — по ощущениям пользователя это и есть "всё зависло". Кладём
+// жёсткий потолок на длительность одной пачки (COALESCE_MAX_MS,
+// sys_gettick() — 10мс/тик, см. PIT_FREQUENCY) — после него выходим и
+// презентуем кадр, даже если сообщения продолжают поступать; следующая
+// пачка подхватит остальное на следующей итерации внешнего for(;;).
+#define COALESCE_MAX_TICKS 3 // 30мс — потолок ниже частоты кадра терминала (16мс), но достаточно для обычной батчевой перерисовки одного redraw()
+
 int main(void) {
     if (sys_wm_register() != 0) return 1; // уже есть другой WM — ровно один на систему
 
@@ -1409,7 +1544,14 @@ int main(void) {
         // тоже и откладываем пересборку сцены дальше. Как только пачка
         // иссякла (таймаут) или сцена не менялась (чистое движение мыши
         // между кликами) — выходим и, если нужно, рисуем один кадр.
-        while (g_content_dirty && sys_ipc_recv(&msg, COALESCE_WAIT_MS) == 1)
+        //
+        // batch_deadline — см. COALESCE_MAX_TICKS выше: источник, который
+        // шлёт сообщения непрерывно быстрее COALESCE_WAIT_MS (терминал,
+        // печатающий вывод команды), иначе держал бы WM в этом while()
+        // вечно, не давая ни одного кадра на экран.
+        long batch_deadline = sys_gettick() + COALESCE_MAX_TICKS;
+        while (g_content_dirty && sys_gettick() < batch_deadline &&
+               sys_ipc_recv(&msg, COALESCE_WAIT_MS) == 1)
             dispatch_message(&msg);
 
         if (g_content_dirty) {
