@@ -31,10 +31,10 @@ PACKAGES = {
     "kill": ("1.0.0", "base", []),
     "ps": ("1.0.0", "base", []),
     "dlpg": ("1.0.0", "base", ["tools"]),  # lpg_format.h lives in LufiraOS/tools
-    "du": ("1.0.1", "user", []),
+    "du": ("1.0.0", "user", []),
     "df": ("1.0.0", "user", []),
     "free": ("1.0.0", "user", []),
-    "cpuload": ("1.1.0", "user", []),
+    "cpuload": ("1.0.0", "user", []),
     # v0.7 plan, stage 5, continued ("as many commands out of the kernel
     # as possible") — ported from the dead kernel-native
     # kernel/shell/commands/*.c in LufiraOS.
@@ -73,7 +73,7 @@ PACKAGES = {
     "text_demo": ("1.0.0", "apps", []),
     # v0.8 (GUI+WM), Фаза 2: настоящие приложения — блокнот (файловый I/O)
     # и файловый менеджер (поверх gui_listbox_t).
-    "notepad": ("1.1.0", "apps", []),
+    "notepad": ("1.0.0", "apps", []),
     "files": ("1.0.0", "apps", []),
     # v0.8 (GUI+WM), этап 4: desktop.c УДАЛЁН — выбор программ теперь прямо
     # на рабочем столе (ярлыки, рисует сам wm.c), не отдельное окно-
@@ -258,11 +258,13 @@ def main() -> None:
     shell_elf = build_shell(repo_root, args.lufira_repo, out_dir, crt0_obj)
     print(f"  built {shell_elf}")
 
-    print("=== Regenerating index.json ===")
-    index = build_index.build_index(repo_root, out_dir)
+    print("=== Regenerating index.json + release/ ===")
+    release_dir = repo_root / "release"
+    index = build_index.build_index(repo_root, out_dir, release_dir)
     index_path = repo_root / "index.json"
     build_index.write_index(index, index_path)
     print(f"index written: {index_path} ({len(index['packages'])} package(s))")
+    print(f"release copies written to: {release_dir}")
 
 
 if __name__ == "__main__":

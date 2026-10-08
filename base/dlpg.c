@@ -9,6 +9,23 @@
 //   dlpg update  <path.lpg>   — установить/обновить (не отказывает, если уже есть)
 //   dlpg list                 — показать установленные пакеты
 //   dlpg remove  <name>       — удалить пакет и все его файлы
+//   dlpg sync                 — скачать актуальный список пакетов с репозитория
+//                                (REMOTE_INDEX_URL) и сохранить локально
+//   dlpg upgrade [name]       — обновить один (name) или все установленные
+//                                пакеты, у которых в синхронизированном
+//                                списке версия новее локальной
+//
+// sync/upgrade — поверх SYS_NET_FETCH (новый syscall, см. его подробное
+// описание в kernel/system/syscall/syscall.h): ОДИН блокирующий вызов
+// скачивает URL целиком (DNS + TCP/TLS + разбор HTTP самим ядром,
+// kernel/net/http_client.c) — dlpg.c никаких сокетов не открывает сам.
+// index.json — НАСТОЯЩИЙ JSON (строится build_index.py в самом
+// lufira-packages), но парсер ниже — НЕ общий JSON-парсер: он знает только
+// ровно ту форму, которую сам же build_index.py всегда производит (плоский
+// массив "packages" из объектов с простыми строковыми полями, без
+// вложенных объектов/массивов внутри элемента) — этого достаточно и
+// надёжно ровно потому, что формат этого файла контролируется тем же
+// репозиторием, а не присылается откуда-то ещё в произвольном виде.
 //
 // БД установленных пакетов — /etc/packages/installed, построчно
 // "имя:major.minor.patch:category" (тот же приём, что уже /etc/passwd,
@@ -30,6 +47,25 @@
 #define INSTALLED_DB   "/etc/packages/installed"
 #define PACKAGES_DIR   "/etc/packages"
 #define MAX_INSTALLED  32
+
+// Репозиторий пакетов — тот же, что у самого lufira-packages (см. его
+// README). "refs/heads/main" (а не просто "main") — именно так его
+// запросил пользователь; raw.githubusercontent.com понимает оба варианта
+// одинаково, но так явнее видно, что это ветка, а не тег/коммит.
+#define REMOTE_INDEX_URL \
+    "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/index.json"
+#define REMOTE_INDEX_CACHE "/etc/packages/remote_index.json"
+// Временный файл для скачанного .lpg перед do_install() — одно имя на всю
+// систему достаточно: dlpg не бывает запущен параллельно сам с собой
+// (однопользовательская ОС, одна интерактивная сессия шелла за раз).
+#define DOWNLOAD_TMP_PATH  "/etc/packages/.download.lpg"
+// index.json сегодня — десятки КБ (~40 пакетов), 256КБ — большой запас на
+// будущий рост списка, не влияющий на типичную систему (буфер malloc'ится
+// только на время самой команды, не держится постоянно).
+#define INDEX_FETCH_CAP    (256u * 1024u)
+// Крупнейший .lpg на сегодня — около 35КБ (wm.elf внутри); 2МБ — запас с
+// большим отрывом под будущие более тяжёлые пакеты.
+#define PACKAGE_FETCH_CAP  (2u * 1024u * 1024u)
 
 typedef struct {
     char name[LPG_NAME_MAX];
@@ -356,6 +392,238 @@ static int do_remove(const char *name) {
     return 0;
 }
 
+/* ===================== минимальный JSON для index.json =====================
+ * См. комментарий в шапке файла — НЕ общий JSON-парсер, понимает только ту
+ * конкретную плоскую форму, которую всегда производит build_index.py.
+ */
+
+// Первое вхождение needle в [hay, hay_end) (hay_end==NULL — до NUL). NULL,
+// если не найдено. Нужен вместо strstr() — её нет в этой freestanding libc
+// (string.h, см. libc/include/string.h).
+static const char *find_sub(const char *hay, const char *hay_end, const char *needle) {
+    size_t nlen = strlen(needle);
+    if (nlen == 0) return hay;
+    const char *end = hay_end ? hay_end : hay + strlen(hay);
+    for (const char *p = hay; p + nlen <= end; p++) {
+        if (strncmp(p, needle, nlen) == 0) return p;
+    }
+    return NULL;
+}
+
+// Указатель на символ сразу ПОСЛЕ открывающей '[' массива "packages", или
+// NULL, если такого ключа в документе нет вовсе (битый/пустой индекс).
+static const char *json_packages_array_start(const char *json) {
+    const char *key = find_sub(json, NULL, "\"packages\"");
+    if (!key) return NULL;
+    const char *bracket = strchr(key, '[');
+    return bracket ? bracket + 1 : NULL;
+}
+
+// *cursor — где-то внутри массива объектов (сразу после '[' или после
+// предыдущего вызова). Находит следующий '{'...'}' (считает вложенность —
+// на случай, если build_index.py когда-нибудь добавит вложенные поля),
+// отдаёт его диапазон через obj_start/obj_end и продвигает *cursor за
+// закрывающую '}'. Возвращает 0 на конце массива (встретили ']' раньше
+// '{') или при явно битом JSON (не нашли закрывающую скобку вовсе).
+static int json_next_object(const char **cursor, const char **obj_start, const char **obj_end) {
+    const char *p = *cursor;
+    while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t' || *p == ',') p++;
+    if (*p != '{') return 0;
+
+    const char *start = p;
+    int depth = 0;
+    for (;; p++) {
+        if (*p == '\0') return 0;
+        if (*p == '{') depth++;
+        else if (*p == '}') { depth--; if (depth == 0) { p++; break; } }
+    }
+
+    *obj_start = start;
+    *obj_end = p;
+    *cursor = p;
+    return 1;
+}
+
+// Ищет строковое поле "key":"value" внутри [obj_start,obj_end) и копирует
+// value в out (до out_cap-1 байт, NUL-terminated). Разворачивает только
+// "\"" и "\\" — больше ничего в value этого индекса никогда не бывает
+// (имена пакетов/версии/URL, см. build_index.py). 0 = успех, -1 = поле не
+// найдено/значение не строка.
+static int json_get_string(const char *obj_start, const char *obj_end, const char *key,
+                            char *out, int out_cap) {
+    char quoted_key[40];
+    int qk = 0;
+    quoted_key[qk++] = '"';
+    for (const char *k = key; *k && qk < (int)sizeof(quoted_key) - 2; k++) quoted_key[qk++] = *k;
+    quoted_key[qk++] = '"';
+    quoted_key[qk] = '\0';
+
+    const char *key_pos = find_sub(obj_start, obj_end, quoted_key);
+    if (!key_pos) return -1;
+
+    const char *p = key_pos + qk;
+    while (p < obj_end && (*p == ' ' || *p == '\t')) p++;
+    if (p >= obj_end || *p != ':') return -1;
+    p++;
+    while (p < obj_end && (*p == ' ' || *p == '\t')) p++;
+    if (p >= obj_end || *p != '"') return -1;
+    p++;
+
+    int n = 0;
+    while (p < obj_end && *p != '"') {
+        char c = *p;
+        if (c == '\\' && p + 1 < obj_end) { p++; c = *p; }
+        if (n < out_cap - 1) out[n++] = c;
+        p++;
+    }
+    out[n] = '\0';
+    return (p < obj_end && *p == '"') ? 0 : -1;
+}
+
+/* ===================== sync/upgrade (SYS_NET_FETCH) ===================== */
+
+static void print_fetch_error(const char *prefix, long code) {
+    switch (code) {
+        case NET_FETCH_EBADURL:  printf("%s: invalid URL\n", prefix); break;
+        case NET_FETCH_EDNS:     printf("%s: DNS resolution failed\n", prefix); break;
+        case NET_FETCH_ECONNECT: printf("%s: connection failed\n", prefix); break;
+        case NET_FETCH_ETLS:     printf("%s: TLS handshake failed\n", prefix); break;
+        case NET_FETCH_EHTTP:    printf("%s: malformed HTTP response\n", prefix); break;
+        case NET_FETCH_ENOSPC:   printf("%s: response too large\n", prefix); break;
+        case NET_FETCH_ENODEV:   printf("%s: no network device found\n", prefix); break;
+        default:                 printf("%s: network error (%ld)\n", prefix, code); break;
+    }
+}
+
+static int do_sync(void) {
+    char *buf = (char *)malloc(INDEX_FETCH_CAP);
+    if (!buf) { printf("dlpg: out of memory\n"); return 1; }
+
+    int status = 0;
+    // CAP-1 — оставляем место под собственный NUL-терминатор ниже
+    // (sys_net_fetch() не NUL-terminate'ит сам — это сырые байты тела).
+    long n = sys_net_fetch(REMOTE_INDEX_URL, buf, INDEX_FETCH_CAP - 1, &status);
+    if (n < 0) {
+        print_fetch_error("dlpg: sync", n);
+        free(buf);
+        return 1;
+    }
+    buf[n] = '\0';
+
+    if (status != 200) {
+        printf("dlpg: sync: server returned HTTP %d\n", status);
+        free(buf);
+        return 1;
+    }
+
+    if (write_whole_file(REMOTE_INDEX_CACHE, buf, n) != 0) {
+        printf("dlpg: sync: failed to save %s\n", REMOTE_INDEX_CACHE);
+        free(buf);
+        return 1;
+    }
+
+    const char *cursor = json_packages_array_start(buf);
+    int count = 0;
+    if (cursor) {
+        const char *os, *oe;
+        while (json_next_object(&cursor, &os, &oe)) count++;
+    }
+
+    printf("dlpg: synced package index (%d package(s) available)\n", count);
+    free(buf);
+    return 0;
+}
+
+// only_name — NULL для "обновить всё установленное", иначе конкретный
+// пакет. upgrade НИКОГДА не ставит пакет, которого ещё нет локально (это
+// дело install/sync — см. комментарий в шапке файла) — только обновляет
+// уже установленные.
+static int do_upgrade(const char *only_name) {
+    long idx_len;
+    char *idx = read_whole_file(REMOTE_INDEX_CACHE, &idx_len);
+    if (!idx) {
+        printf("dlpg: no local package index — run 'dlpg sync' first\n");
+        return 1;
+    }
+
+    installed_entry_t installed[MAX_INSTALLED];
+    int installed_count = load_installed(installed);
+    if (installed_count == 0) {
+        printf("No packages installed.\n");
+        free(idx);
+        return 0;
+    }
+
+    const char *cursor = json_packages_array_start(idx);
+    if (!cursor) {
+        printf("dlpg: remote index malformed (no 'packages' array) — try 'dlpg sync' again\n");
+        free(idx);
+        return 1;
+    }
+
+    int checked = 0, upgraded = 0, failed = 0;
+    const char *obj_start, *obj_end;
+    while (json_next_object(&cursor, &obj_start, &obj_end)) {
+        char name[LPG_NAME_MAX], version_str[32], lpg_url[256];
+        if (json_get_string(obj_start, obj_end, "name", name, sizeof(name)) != 0) continue;
+        if (only_name && strcmp(name, only_name) != 0) continue;
+        if (json_get_string(obj_start, obj_end, "version", version_str, sizeof(version_str)) != 0) continue;
+        if (json_get_string(obj_start, obj_end, "lpg", lpg_url, sizeof(lpg_url)) != 0) continue;
+
+        int local_idx = find_installed(installed, installed_count, name);
+        if (local_idx < 0) continue; // не установлен — не дело upgrade (см. комментарий выше)
+
+        checked++;
+        lpg_version_t remote_v = parse_version_str(version_str);
+        if (!lpg_version_gt(remote_v, installed[local_idx].version)) continue; // уже актуален
+
+        printf("dlpg: upgrading '%s' %u.%u.%u -> %u.%u.%u\n", name,
+               installed[local_idx].version.major, installed[local_idx].version.minor,
+               installed[local_idx].version.patch,
+               remote_v.major, remote_v.minor, remote_v.patch);
+
+        uint8_t *pkgbuf = (uint8_t *)malloc(PACKAGE_FETCH_CAP);
+        if (!pkgbuf) { printf("dlpg: out of memory, skipping '%s'\n", name); failed++; continue; }
+
+        int status = 0;
+        long n = sys_net_fetch(lpg_url, pkgbuf, PACKAGE_FETCH_CAP, &status);
+        if (n < 0) {
+            print_fetch_error("dlpg: upgrade", n);
+            free(pkgbuf);
+            failed++;
+            continue;
+        }
+        if (status != 200) {
+            printf("dlpg: upgrade '%s': server returned HTTP %d\n", name, status);
+            free(pkgbuf);
+            failed++;
+            continue;
+        }
+
+        if (write_whole_file(DOWNLOAD_TMP_PATH, pkgbuf, n) != 0) {
+            printf("dlpg: upgrade '%s': failed to stage download\n", name);
+            free(pkgbuf);
+            failed++;
+            continue;
+        }
+        free(pkgbuf);
+
+        if (do_install(DOWNLOAD_TMP_PATH, 1) == 0) upgraded++; else failed++;
+        sys_unlink(DOWNLOAD_TMP_PATH);
+
+        // do_install() сам перечитал installed/installed_count с диска
+        // внутри себя и сохранил обновлённую запись — наша локальная копия
+        // installed[] выше теперь устарела для ЭТОГО пакета (версия), но
+        // find_installed()/остальные ЕЩЁ не проверенные записи в ней не
+        // трогаются этим изменением, так что перечитывать всю таблицу
+        // заново посреди цикла не нужно.
+    }
+
+    free(idx);
+    printf("dlpg: upgrade complete: %d checked, %d upgraded, %d failed\n", checked, upgraded, failed);
+    return failed > 0 ? 1 : 0;
+}
+
 /* ===================== main ===================== */
 
 static void print_usage(void) {
@@ -363,6 +631,8 @@ static void print_usage(void) {
     printf("       dlpg update  <path.lpg>\n");
     printf("       dlpg list\n");
     printf("       dlpg remove  <name>\n");
+    printf("       dlpg sync\n");
+    printf("       dlpg upgrade [name]\n");
 }
 
 int main(int argc, char **argv) {
@@ -382,6 +652,10 @@ int main(int argc, char **argv) {
     } else if (strcmp(subcmd, "remove") == 0) {
         if (argc < 3) { print_usage(); return 1; }
         return do_remove(argv[2]);
+    } else if (strcmp(subcmd, "sync") == 0) {
+        return do_sync();
+    } else if (strcmp(subcmd, "upgrade") == 0) {
+        return do_upgrade(argc >= 3 ? argv[2] : NULL);
     }
 
     print_usage();
