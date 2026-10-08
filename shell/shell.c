@@ -1,31 +1,18 @@
-// shell.c — userspace-замена kernel-native шелла (kernel/shell/shell.c) —
-// v0.7 план, этап 5, под-этап 6 (последний, самый рискованный). Настоящий
-// ring3-процесс: читает /dev/console блокирующим SYS_READ (fd 0, см.
-// console_input_read()/console_read() в drivers/input/input.c и fs/vfs/
-// vfs.c), запускает команды через fork()+exec()+wait() (SYS_FORK/EXEC/WAIT
-// — уже существовавшие примитивы, никакой заглушки не нужно), Ctrl+C —
-// через SYS_SET_FOREGROUND (см. комментарий в kernel/system/syscall/
-// syscall.h) поверх уже безопасного kernel-side process_signal(pid,
-// SIGINT)-механизма.
+// shell.c — userspace-замена kernel-native шелла (kernel/shell/shell.c).
+// Ring3-процесс: читает /dev/console блокирующим SYS_READ (console_input_
+// read()/console_read(), drivers/input/input.c, fs/vfs/vfs.c), команды —
+// fork()+exec()+wait(), Ctrl+C — SYS_SET_FOREGROUND поверх существующего
+// process_signal(pid, SIGINT).
 //
-// Сознательно НЕ полная замена: покрывает встроенные команды (cd/pwd/exit/
-// help/history/echo/clear/wait/su/mount/unmount) и ЛЮБУЮ программу из /bin
-// (все пакеты этапов 1-5: du/df/free/cpuload/cp/mv/ls/mkdir/rm/kill/ps/
-// dlpg/cat/touch/write/chmod/chown/fg/bg/color/reset/reboot/shutdown/
-// devmode/whoami/useradd/groupadd/passwd/usbinfo/usbread/usbwrite —
-// users/usb получили свои syscall'ы, color/mount давно не блокированы).
-// Network/sound всё ещё бьют в kernel-internal функции без syscall'а —
-// НЕ портированы ни в пакеты, ни сюда; при попытке набрать такую команду
-// shell.elf честно ответит "unknown command", как и для любого другого не
-// найденного /bin/*.
+// Не полная замена: встроенные cd/pwd/exit/help/history/echo/clear/wait/
+// su/mount/unmount плюс любая программа из /bin. Network/sound всё ещё
+// без syscall'а — не портированы; shell.elf отвечает "unknown command".
 //
-// argv[]/envp[] для SYS_EXEC — ТОЛЬКО static (не стек!): is_user_range_valid()
-// в SYS_EXEC проверяет фиксированный (MAX_EXEC_ARGS+1)*8 байт от начала
-// массива, а не только до NUL-терминатора — маленький стековый argv[]
-// рядом с верхом 16KB пользовательского стека может не пройти эту
-// проверку даже будучи валидным (см. комментарий у copy_user_string_array()
-// в kernel/system/syscall/syscall.c — найдено и задокументировано в этом
-// же под-этапе).
+// argv[]/envp[] для SYS_EXEC — только static, не стек: is_user_range_valid()
+// проверяет фиксированные (MAX_EXEC_ARGS+1)*8 байт от начала массива, не
+// до NUL — маленький стековый argv[] у верха 16KB стека может не пройти
+// эту проверку даже будучи валидным (см. copy_user_string_array(),
+// kernel/system/syscall/syscall.c).
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,11 +104,9 @@ static void lookup_user(void) {
 
 /* ===================== запуск команд ===================== */
 
-// name может уже быть абсолютным путём (легаси "run /bin/foo.elf" синтаксис
-// из kernel-native шелла) — тогда используем его как есть, не приклеивая
-// "/bin/" ещё раз. Иначе — то самое PATH-подобное поведение, которым уже
-// пользуется run_external_command() в кернел-нативном шелле: сначала
-// "/bin/<name>", потом "/bin/<name>.elf".
+// Абсолютный путь (легаси "run /bin/foo.elf") — используем как есть, не
+// приклеивая "/bin/" снова. Иначе PATH-подобное поведение: сначала
+// "/bin/<name>", потом "/bin/<name>.elf" (как в kernel-native шелле).
 static int resolve_bin_path(const char *name, char *out, int out_cap) {
     if (name[0] == '/') {
         long fd = sys_open(name, O_RDONLY, 0);
@@ -193,11 +178,9 @@ static void builtin_help(void) {
     printf("Append & to run in background (e.g. \"cpuload &\").\n");
 }
 
-// mount <usb-index> <prefix> — после успеха обычные cd/ls/cat/cp/mkdir/rm
-// видят файлы КОРНЕВОГО каталога флешки прямо под <prefix> (см. комментарий
-// у SYS_MOUNT, kernel/system/syscall/syscall.h) — никакой отдельной команды
-// для чтения/записи не нужно, в отличие от старого кернел-native mountls/
-// mountcat/mountwrite.
+// mount <usb-index> <prefix> — после успеха cd/ls/cat/cp/mkdir/rm видят
+// корень флешки прямо под <prefix> (см. SYS_MOUNT, syscall.h) — отдельные
+// команды чтения/записи (старые mountls/mountcat/mountwrite) не нужны.
 static void builtin_mount(int argc, char *argv[]) {
     if (argc < 3) {
         printf("Usage: mount <usb-device-index> <prefix>  (e.g. \"mount 0 /mnt/usb0\")\n");
@@ -228,10 +211,8 @@ static void builtin_unmount(int argc, char *argv[]) {
     if (sys_unmount(argv[1]) != 0) printf("unmount: no such mount: %s\n", argv[1]);
 }
 
-// Читает строку с /dev/console БЕЗ эха — shell.elf сам отвечает за эхо
-// каждого байта (см. главный цикл в main()), поэтому "скрыть" пароль — это
-// просто не делать тот самый sys_write(1, &c, 1), которым обычно эхо и
-// реализовано. Backspace редактирует буфер молча (не печатает "\b" назад).
+// Без эха — shell.elf сам отвечает за эхо (см. main()), скрыть пароль —
+// просто не делать sys_write(1,&c,1). Backspace молча редактирует буфер.
 static void read_hidden_line(char *out, int cap) {
     int len = 0;
     for (;;) {
@@ -249,14 +230,10 @@ static void read_hidden_line(char *out, int cap) {
     sys_write(1, "\n", 1);
 }
 
-// su [username] — без пароля на аргумент командной строки (старый
-// кернел-native command_su брал его так, но тогда он виден прямо в строке
-// ввода шелла — см. комментарий у SYS_SU в kernel/system/syscall/
-// syscall.h). Пароль проверяет ЯДРО внутри sys_su(); shell.elf только
-// просит его скрыто и передаёт как есть. После успеха — re-lookup своей
-// же identity (sys_su() уже сменил uid процесса, так что sys_getuid()
-// внутри lookup_user() увидит нового пользователя) и cd в его домашнюю
-// папку, как и положено настоящему su.
+// su [username] — пароль не аргументом командной строки (старый
+// command_su так брал, но он был виден в строке ввода) — просим скрыто,
+// проверяет ядро в sys_su(). После успеха — re-lookup identity (uid уже
+// сменён) и cd в домашнюю папку.
 static void builtin_su(int argc, char *argv[]) {
     const char *username = (argc >= 2) ? argv[1] : "root";
 
@@ -295,17 +272,13 @@ static void print_prompt(void) {
     }
 }
 
-// Редравит строку ввода целиком после ЛЮБОГО изменения — тот же принцип,
-// что у shell_refresh_input_line() в старом кернел-native шелле (kernel/
-// shell/shell.c): не надеяться на инкрементальное эхо (один sys_write на
-// символ/backspace) оставаться синхронным с буфером вечно, а каждый раз
-// перерисовывать всё заново из line[]. Работает ЧИСТО относительно, без
-// абсолютных координат курсора (которых userspace не знает — консоль
-// умеет только set_cursor_position с явным x/y, а не "где курсор сейчас"):
-// считаем, что экранный курсор стоит ровно в old_cursor символах от
-// начала строки ввода — это инвариант, который redraw_line() сама же
-// поддерживает (всегда оставляет курсор в new_cursor), так что следующий
-// вызов может ему доверять.
+// Перерисовывает строку ввода целиком после любого изменения — не
+// надеемся, что инкрементальное эхо (sys_write на символ/backspace)
+// остаётся синхронным с буфером вечно. Работает чисто относительно (без
+// абсолютных координат курсора, которых userspace не знает): инвариант —
+// курсор стоит в old_cursor символах от начала строки, функция сама же
+// его поддерживает (оставляет в new_cursor), так что следующий вызов
+// может доверять этому инварианту.
 static void redraw_line(const char *line, int old_len, int old_cursor, int new_len, int new_cursor) {
     for (int i = 0; i < old_cursor; i++) sys_write(1, "\b", 1);
     if (new_len > 0) sys_write(1, line, (unsigned long)new_len);
@@ -313,14 +286,10 @@ static void redraw_line(const char *line, int old_len, int old_cursor, int new_l
         for (int i = 0; i < old_len - new_len; i++) sys_write(1, " ", 1);
         for (int i = 0; i < old_len - new_len; i++) sys_write(1, "\b", 1);
     }
-    // Это ПОСЛЕДНИЙ шаг, после которого экран уже содержит правильное
-    // новое содержимое строки (только что дописано выше) — курсор нужно
-    // просто подвинуть назад к new_cursor, НЕ трогая то, что там
-    // нарисовано. raw '\b' тут бы стирал только что написанные символы
-    // (найдено живым тестированием: вставка символа в середину строки,
-    // например "abcdef" -> курсор между 'c' и 'd' -> вставить 'X',
-    // стирала хвост "def" этим самым циклом) — та же ошибка, что и у
-    // стрелок влево/вправо до их собственного фикса на con_cursor_left().
+    // Последний шаг: экран уже содержит правильный текст, курсор просто
+    // двигаем к new_cursor без его перерисовки. Баг: raw '\b' тут стирал
+    // бы только что написанные символы (вставка в середину "abcdef" ->
+    // 'X' стирала хвост "def") — та же ошибка, что у стрелок до con_cursor_left().
     for (int i = 0; i < new_len - new_cursor; i++) con_cursor_left();
 }
 
@@ -358,10 +327,9 @@ int main(void) {
                 if (cursor > 0) { con_cursor_left(); cursor--; }
                 continue;
             }
-            if (c == 0x02) { // стрелка вправо — тот же принцип: раньше здесь
-                // перепечатывался line[cursor] (что ВЫГЛЯДИТ как перемещение
-                // только потому, что символ там не менялся), con_cursor_right()
-                // двигает курсор явно, без зависимости от содержимого строки
+            if (c == 0x02) { // стрелка вправо — con_cursor_right() двигает курсор явно
+                // (раньше тут перепечатывался line[cursor], что лишь выглядело как
+                // перемещение, пока символ не менялся)
                 if (cursor < len) { con_cursor_right(); cursor++; }
                 continue;
             }

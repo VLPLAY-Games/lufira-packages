@@ -1,40 +1,25 @@
-// dlpg.c — установщик пакетов LufiraOS (v0.7 план, этап 2). Base-пакет
-// (сам является userspace ELF), но не требует НИ ОДНОГО нового syscall'а —
-// вся логика (парсинг .lpg, проверка зависимостей, распаковка, БД
-// установленных пакетов) поверх уже существующих OPEN/READ/WRITE/CLOSE/
-// SEEK/CHMOD/MKDIR/UNLINK.
+// dlpg.c — установщик пакетов LufiraOS. Base-пакет, но без новых syscall'ов
+// — вся логика (парсинг .lpg, зависимости, распаковка, БД пакетов) поверх
+// существующих OPEN/READ/WRITE/CLOSE/SEEK/CHMOD/MKDIR/UNLINK.
 //
 // Подкоманды:
 //   dlpg install <path.lpg>   — установить новый пакет (отказ, если уже есть)
 //   dlpg update  <path.lpg>   — установить/обновить (не отказывает, если уже есть)
 //   dlpg list                 — показать установленные пакеты
 //   dlpg remove  <name>       — удалить пакет и все его файлы
-//   dlpg sync                 — скачать актуальный список пакетов с репозитория
-//                                (REMOTE_INDEX_URL) и сохранить локально
-//   dlpg upgrade [name]       — обновить один (name) или все установленные
-//                                пакеты, у которых в синхронизированном
-//                                списке версия новее локальной
+//   dlpg sync                 — скачать список пакетов (REMOTE_INDEX_URL), сохранить локально
+//   dlpg upgrade [name]       — обновить один/все пакеты новее локальной версии
 //
-// sync/upgrade — поверх SYS_NET_FETCH (новый syscall, см. его подробное
-// описание в kernel/system/syscall/syscall.h): ОДИН блокирующий вызов
-// скачивает URL целиком (DNS + TCP/TLS + разбор HTTP самим ядром,
-// kernel/net/http_client.c) — dlpg.c никаких сокетов не открывает сам.
-// index.json — НАСТОЯЩИЙ JSON (строится build_index.py в самом
-// lufira-packages), но парсер ниже — НЕ общий JSON-парсер: он знает только
-// ровно ту форму, которую сам же build_index.py всегда производит (плоский
-// массив "packages" из объектов с простыми строковыми полями, без
-// вложенных объектов/массивов внутри элемента) — этого достаточно и
-// надёжно ровно потому, что формат этого файла контролируется тем же
-// репозиторием, а не присылается откуда-то ещё в произвольном виде.
+// sync/upgrade — один блокирующий SYS_NET_FETCH (DNS+TCP/TLS+HTTP в ядре,
+// kernel/net/http_client.c), dlpg сам сокетов не открывает. index.json —
+// настоящий JSON, но парсер ниже понимает только плоский массив "packages"
+// со строковыми полями, который всегда производит build_index.py.
 //
 // БД установленных пакетов — /etc/packages/installed, построчно
-// "имя:major.minor.patch:category" (тот же приём, что уже /etc/passwd,
-// /etc/group — kernel/system/users/users.c). Список файлов каждого
-// пакета — свой файл /etc/packages/<имя>.files (по одному абсолютному
-// пути на строку), нужен только remove'у, чтобы знать, что удалять.
+// "имя:major.minor.patch:category" (как /etc/passwd — users.c); список
+// файлов пакета — /etc/packages/<имя>.files, нужен только remove().
 //
-// Сборка (отличается от других userspace-программ ОДНИМ дополнительным
-// -I — общий формат .lpg лежит в tools/, не в libc/include):
+// Сборка — доп. -Itools (формат .lpg лежит там, не в libc/include):
 //   gcc $FLAGS -Itools -c userspace/base/dlpg.c -o dlpg.o
 //   ld ... -o dlpg.elf crt0.o dlpg.o string.o malloc.o printf.o stdlib.o
 
@@ -48,23 +33,17 @@
 #define PACKAGES_DIR   "/etc/packages"
 #define MAX_INSTALLED  32
 
-// Репозиторий пакетов — тот же, что у самого lufira-packages (см. его
-// README). "refs/heads/main" (а не просто "main") — именно так его
-// запросил пользователь; raw.githubusercontent.com понимает оба варианта
-// одинаково, но так явнее видно, что это ветка, а не тег/коммит.
+// Репозиторий пакетов — тот же, что у lufira-packages (см. README).
+// "refs/heads/main", не просто "main" — явнее видно, что это ветка.
 #define REMOTE_INDEX_URL \
     "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/index.json"
 #define REMOTE_INDEX_CACHE "/etc/packages/remote_index.json"
-// Временный файл для скачанного .lpg перед do_install() — одно имя на всю
-// систему достаточно: dlpg не бывает запущен параллельно сам с собой
-// (однопользовательская ОС, одна интерактивная сессия шелла за раз).
+// Одно общее имя достаточно — dlpg не бывает запущен параллельно сам с
+// собой (однопользовательская ОС, одна сессия шелла за раз).
 #define DOWNLOAD_TMP_PATH  "/etc/packages/.download.lpg"
-// index.json сегодня — десятки КБ (~40 пакетов), 256КБ — большой запас на
-// будущий рост списка, не влияющий на типичную систему (буфер malloc'ится
-// только на время самой команды, не держится постоянно).
+// index.json сегодня — десятки КБ (~40 пакетов); запас на рост списка.
 #define INDEX_FETCH_CAP    (256u * 1024u)
-// Крупнейший .lpg на сегодня — около 35КБ (wm.elf внутри); 2МБ — запас с
-// большим отрывом под будущие более тяжёлые пакеты.
+// Крупнейший .lpg сегодня — ~35КБ (wm.elf); запас под будущий рост.
 #define PACKAGE_FETCH_CAP  (2u * 1024u * 1024u)
 
 typedef struct {
@@ -74,10 +53,8 @@ typedef struct {
 } installed_entry_t;
 
 /* ===================== мелкие ручные парсеры =====================
- * В этой freestanding-libc нет ни atoi(), ни sscanf() (см. libc/include/
- * stdlib.h) — те же ручные циклы по цифрам, что уже используются во всём
- * остальном ядре (kernel/lib/string.c: atoi()/hex_to_int()).
- */
+ * Нет atoi()/sscanf() в этой freestanding libc — ручные циклы по цифрам,
+ * как в kernel/lib/string.c (atoi()/hex_to_int()). */
 static unsigned int parse_uint_local(const char *s, int *consumed) {
     unsigned int v = 0;
     int i = 0;
@@ -393,13 +370,10 @@ static int do_remove(const char *name) {
 }
 
 /* ===================== минимальный JSON для index.json =====================
- * См. комментарий в шапке файла — НЕ общий JSON-парсер, понимает только ту
- * конкретную плоскую форму, которую всегда производит build_index.py.
- */
+ * Не общий парсер — понимает только плоскую форму build_index.py (см. шапку). */
 
-// Первое вхождение needle в [hay, hay_end) (hay_end==NULL — до NUL). NULL,
-// если не найдено. Нужен вместо strstr() — её нет в этой freestanding libc
-// (string.h, см. libc/include/string.h).
+// Первое вхождение needle в [hay, hay_end) (hay_end==NULL — до NUL), NULL
+// если не найдено — нужен вместо strstr(), которой нет в этой libc.
 static const char *find_sub(const char *hay, const char *hay_end, const char *needle) {
     size_t nlen = strlen(needle);
     if (nlen == 0) return hay;
@@ -419,12 +393,10 @@ static const char *json_packages_array_start(const char *json) {
     return bracket ? bracket + 1 : NULL;
 }
 
-// *cursor — где-то внутри массива объектов (сразу после '[' или после
-// предыдущего вызова). Находит следующий '{'...'}' (считает вложенность —
-// на случай, если build_index.py когда-нибудь добавит вложенные поля),
-// отдаёт его диапазон через obj_start/obj_end и продвигает *cursor за
-// закрывающую '}'. Возвращает 0 на конце массива (встретили ']' раньше
-// '{') или при явно битом JSON (не нашли закрывающую скобку вовсе).
+// *cursor внутри массива объектов (после '[' или предыдущего вызова).
+// Находит следующий '{'...'}' (считает вложенность на случай будущих
+// вложенных полей), отдаёт диапазон через obj_start/obj_end, продвигает
+// *cursor. Возвращает 0 на конце массива или при битом JSON.
 static int json_next_object(const char **cursor, const char **obj_start, const char **obj_end) {
     const char *p = *cursor;
     while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t' || *p == ',') p++;
@@ -444,11 +416,9 @@ static int json_next_object(const char **cursor, const char **obj_start, const c
     return 1;
 }
 
-// Ищет строковое поле "key":"value" внутри [obj_start,obj_end) и копирует
-// value в out (до out_cap-1 байт, NUL-terminated). Разворачивает только
-// "\"" и "\\" — больше ничего в value этого индекса никогда не бывает
-// (имена пакетов/версии/URL, см. build_index.py). 0 = успех, -1 = поле не
-// найдено/значение не строка.
+// Ищет "key":"value" внутри [obj_start,obj_end), копирует value в out.
+// Разворачивает только \" и \\ — больше в value этого индекса не бывает
+// (имена/версии/URL, build_index.py). 0 = успех, -1 = не найдено/не строка.
 static int json_get_string(const char *obj_start, const char *obj_end, const char *key,
                             char *out, int out_cap) {
     char quoted_key[40];
@@ -499,20 +469,11 @@ static int do_sync(void) {
     char *buf = (char *)malloc(INDEX_FETCH_CAP);
     if (!buf) { printf("dlpg: out of memory\n"); return 1; }
 
-    // НАЙДЕННЫЙ БАГ (жалоба пользователя: "dlpg sync и всё зависает
-    // полностью, нет вывода текста как в линуксе — получение списка,
-    // обработка и т.д."): sys_net_fetch() — ОДИН синхронный блокирующий
-    // syscall (DNS + TCP + TLS-рукопожатие + HTTP целиком, см. его
-    // комментарий в kernel/system/syscall/syscall.h) — ядро физически не
-    // может сообщить userspace промежуточный прогресс изнутри него (это не
-    // отдельные шаги, это один вызов), а TLS-рукопожатие (RSA-проверка
-    // подписи ServerKeyExchange — модульное возведение в степень большого
-    // числа) особенно под QEMU TCG (без аппаратного ускорения) может
-    // ощутимо занять десятки секунд — вообще без единой строчки на экране
-    // до этого это НЕ отличить от настоящего зависания. Раз сам прогресс
-    // изнутри одного syscall'а не вывести, печатаем что знаем ДО и ПОСЛЕ
-    // него — тот же принцип, что у apt: "Получение..." / "Чтение списка
-    // пакетов... Готово", а не тишина.
+    // Баг: "dlpg sync зависает полностью, нет вывода как в линуксе".
+    // sys_net_fetch() — один блокирующий syscall (DNS+TCP+TLS+HTTP целиком) —
+    // ядро не может сообщить промежуточный прогресс, а TLS-рукопожатие под
+    // QEMU TCG (без аппаратного ускорения) может занять десятки секунд —
+    // неотличимо от зависания. Печатаем что знаем до/после (как у apt).
     printf("dlpg: connecting to the package repository...\n");
     printf("      (DNS + TCP + TLS handshake - may take up to a minute, especially under emulation)\n");
 
@@ -553,10 +514,9 @@ static int do_sync(void) {
     return 0;
 }
 
-// only_name — NULL для "обновить всё установленное", иначе конкретный
-// пакет. upgrade НИКОГДА не ставит пакет, которого ещё нет локально (это
-// дело install/sync — см. комментарий в шапке файла) — только обновляет
-// уже установленные.
+// only_name — NULL = обновить всё установленное, иначе один пакет.
+// upgrade никогда не ставит новый пакет (это дело install/sync) — только
+// обновляет уже установленные.
 static int do_upgrade(const char *only_name) {
     long idx_len;
     char *idx = read_whole_file(REMOTE_INDEX_CACHE, &idx_len);
@@ -635,12 +595,9 @@ static int do_upgrade(const char *only_name) {
         if (do_install(DOWNLOAD_TMP_PATH, 1) == 0) upgraded++; else failed++;
         sys_unlink(DOWNLOAD_TMP_PATH);
 
-        // do_install() сам перечитал installed/installed_count с диска
-        // внутри себя и сохранил обновлённую запись — наша локальная копия
-        // installed[] выше теперь устарела для ЭТОГО пакета (версия), но
-        // find_installed()/остальные ЕЩЁ не проверенные записи в ней не
-        // трогаются этим изменением, так что перечитывать всю таблицу
-        // заново посреди цикла не нужно.
+        // do_install() перечитал installed[] с диска сам и сохранил запись —
+        // наша локальная копия выше устарела только для ЭТОГО пакета; остальные
+        // записи не тронуты, перечитывать всю таблицу посреди цикла не нужно.
     }
 
     free(idx);
@@ -662,9 +619,8 @@ static void print_usage(void) {
 int main(int argc, char **argv) {
     if (argc < 2) { print_usage(); return 1; }
 
-    // Игнорируем результат — успех, если директории ещё не было и она
-    // создалась, успех и если она уже была (sys_mkdir() тогда вернёт
-    // ошибку "уже существует", которую здесь незачем отдельно различать).
+    // Игнорируем результат — успех, была директория уже или только создалась
+    // (sys_mkdir() на "уже существует" вернёт ошибку, здесь не важную).
     sys_mkdir(PACKAGES_DIR, 0755);
 
     const char *subcmd = argv[1];
