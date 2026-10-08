@@ -147,6 +147,7 @@ typedef struct {
     int minimized;          // скрыто с рабочего стола, но кнопка в таскбаре осталась
     int maximized;           // растянуто на весь рабочий стол (до таскбара)
     int restore_x, restore_y, restore_w, restore_h; // геометрия ДО maximize — для restore; валидны только пока maximized
+    uint32_t bg_color;      // последний цвет ПОЛНОЙ заливки (sys_win_fill) — см. комментарий у resize_window_buffer()
 } wm_window_t;
 
 static wm_window_t g_windows[WM_MAX_WINDOWS];
@@ -182,6 +183,13 @@ static int g_resize_start_w = 0, g_resize_start_h = 0;
 static int g_content_dirty = 1;
 static int g_cursor_moved = 0;
 static int g_mouse_x = 0, g_mouse_y = 0, g_prev_buttons = 0;
+// Где курсор был НАРИСОВАН в прошлый present_frame() — нужно, чтобы на
+// чисто-курсорном кадре знать, какую область g_present_fb "запачкал"
+// старый силуэт (и её надо стереть, восстановив из g_fb), см.
+// present_frame() ниже. -1000 — заведомо далеко за экраном: самый первый
+// present_frame(1) всё равно полный, так что неточный "старый" bbox тут
+// ни на что не влияет.
+static int g_last_cursor_x = -1000, g_last_cursor_y = -1000;
 
 static uint32_t g_screen_w = 0, g_screen_h = 0, g_pixel_format = 0;
 static uint32_t *g_fb = NULL;         // сцена БЕЗ курсора, malloc'd w*h — актуальна только после composite_scene()
@@ -470,14 +478,22 @@ static int outer_w(const wm_window_t *w) { return w->w + 2 * WM_BORDER; }
 static int outer_h(const wm_window_t *w) { return w->h + WM_TITLEBAR_HEIGHT + WM_BORDER; }
 
 // Реаллоцирует пиксельный буфер окна под новый размер клиентской области,
-// сохраняя пересекающуюся область (верхний левый угол) как есть — при
-// увеличении новая полоса справа/снизу просто чёрная (как и при
-// sys_win_create(), см. memset там), при уменьшении лишнее обрезается.
-// Благодаря этому restore после maximize() даёт ТОЧНО тот же вид, что был
-// до него (исходная область никогда не трогалась, просто временно
-// "перекрывалась" большим буфером) — отдельно сохранять старые пиксели не
-// нужно. Не шлёт LUFIRA_GUI_EVENT_RESIZE и не трогает g_content_dirty —
-// это дело вызывающего (разным путям ресайза нужны разные доп. действия).
+// сохраняя пересекающуюся область (верхний левый угол) как есть. При
+// уменьшении лишнее обрезается — восстановление после maximize() даёт
+// ТОЧНО тот же вид, что был до него (исходная область никогда не
+// трогалась, просто временно "перекрывалась" большим буфером), отдельно
+// сохранять старые пиксели не нужно.
+//
+// НАЙДЕННЫЙ БАГ (жалоба пользователя: при разворачивании/увеличении окна
+// новая территория всегда ЧЁРНАЯ, "а в обычных системах фон просто
+// расширяется") — раньше новая полоса справа/снизу заполнялась нулём
+// (чёрный), независимо от того, чем приложение красит свой фон. Красить
+// её ТЕМ ЖЕ цветом, которым приложение последний раз заливало окно
+// целиком (bg_color, см. do_win_fill()), не идеально (приложение само не
+// перерисовывает новую площадь, пока не перерисуется в следующий раз —
+// см. комментарий у LUFIRA_GUI_EVENT_RESIZE, syscall.h), но ровно
+// убирает "чёрную дыру" для типичного случая (do_win_fill() одним цветом
+// — первая строчка почти любого redraw()).
 static void resize_window_buffer(wm_window_t *w, int new_w, int new_h) {
     if (new_w < 1) new_w = 1;
     if (new_h < 1) new_h = 1;
@@ -485,7 +501,7 @@ static void resize_window_buffer(wm_window_t *w, int new_w, int new_h) {
 
     uint32_t *new_pixels = (uint32_t *)malloc((size_t)new_w * (size_t)new_h * sizeof(uint32_t));
     if (!new_pixels) return; // ОЗУ кончилась — оставляем старый размер как есть
-    memset(new_pixels, 0, (size_t)new_w * (size_t)new_h * sizeof(uint32_t));
+    for (size_t i = 0, n = (size_t)new_w * (size_t)new_h; i < n; i++) new_pixels[i] = w->bg_color;
 
     int copy_w = new_w < w->w ? new_w : w->w;
     int copy_h = new_h < w->h ? new_h : w->h;
@@ -829,6 +845,17 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
 }
 
 #define CURSOR_H 14
+// Ограничивающий прямоугольник ВСЕГО силуэта курсора (треугольник +
+// пятка + 1px чёрная обводка по контуру, см. draw_cursor() ниже),
+// относительно хотспота (x,y) курсора: от (x+CURSOR_BBOX_X_OFF,
+// y+CURSOR_BBOX_Y_OFF) размером CURSOR_BBOX_W x CURSOR_BBOX_H. Используется
+// present_frame() ниже, чтобы на чисто-курсорном кадре трогать (копировать
+// из g_fb, презентовать в ядро) ТОЛЬКО эту маленькую область, а не весь
+// экран — см. подробный разбор задержки курсора там же.
+#define CURSOR_BBOX_X_OFF -1
+#define CURSOR_BBOX_Y_OFF -1
+#define CURSOR_BBOX_W 16
+#define CURSOR_BBOX_H 20
 
 // Залитый треугольник-стрелка (остриё в x,y, диагональ вниз-вправо) +
 // короткая "пятка" вдоль левого края — силуэт классического курсора, не
@@ -973,17 +1000,91 @@ static void composite_scene(void) {
 
 }
 
-// Дешёвая часть: копирует уже готовую сцену (g_fb) в буфер презентации
-// одним memcpy (быстрее любого числа scalar-записей пикселей), рисует
-// курсор поверх И ТОЛЬКО ЕГО, затем отправляет кадр в ядро. Вызывается
-// на КАЖДЫЙ кадр, который реально нужно показать (и после
-// composite_scene(), и при чистом движении курсора) — сама по себе на
-// порядки дешевле composite_scene().
-static void present_frame(void) {
+static void cursor_bbox(int cx, int cy, int *x0, int *y0, int *x1, int *y1) {
+    *x0 = cx + CURSOR_BBOX_X_OFF;
+    *y0 = cy + CURSOR_BBOX_Y_OFF;
+    *x1 = *x0 + CURSOR_BBOX_W;
+    *y1 = *y0 + CURSOR_BBOX_H;
+    if (*x0 < 0) *x0 = 0;
+    if (*y0 < 0) *y0 = 0;
+    if (*x1 > (int)g_screen_w) *x1 = (int)g_screen_w;
+    if (*y1 > (int)g_screen_h) *y1 = (int)g_screen_h;
+}
+
+// Копирует [x0,x1)x[y0,y1) (экранные координаты, уже клипнутые вызывающим)
+// из готовой сцены g_fb в буфер презентации — построчно, своя полоса на
+// каждую строку (та же идея, что у fb_blit()).
+static void present_copy_rect(int x0, int y0, int x1, int y1) {
+    for (int py = y0; py < y1; py++) {
+        memcpy(g_present_fb + (size_t)py * g_screen_w + x0,
+               g_fb + (size_t)py * g_screen_w + x0,
+               (size_t)(x1 - x0) * sizeof(uint32_t));
+    }
+}
+
+// full=1 — "тяжёлый" путь: копирует всю сцену (g_fb) в буфер презентации
+// одним memcpy, рисует курсор, презентует кадр ЦЕЛИКОМ. Нужен, когда
+// реально что-то поменялось в сцене (после composite_scene()) — тогда
+// заранее неизвестно, что именно изменилось, так что дешевле/надёжнее
+// просто взять весь кадр.
+//
+// full=0 — "лёгкий" путь: ЧИСТОЕ движение курсора, сцена не менялась.
+// НАЙДЕННЫЙ БАГ (жалоба пользователя: курсор идёт с заметной задержкой в
+// реальном использовании) — раньше full-путь выполнялся БЕЗУСЛОВНО на
+// КАЖДОЕ движение мыши: memcpy ~4МБ (1280x800) g_fb->g_present_fb, а
+// затем sys_fb_present() всего кадра — тот же объём ещё раз копировался в
+// ядре из буфера клиента в framebuffer (часто MMIO/VRAM, ощутимо дороже
+// RAM, см. подробный разбор в kernel/drivers/console/console.c,
+// gfx_present()) на КАЖДЫЙ "грязный" тик таймера. При частых событиях
+// мыши (PS/2/USB шлют их десятками в секунду) это два полноэкранных
+// копирования на каждое — и складывалось в заметную задержку, хотя при
+// редких одиночных движениях (как при живом тестировании скриншотами)
+// это было незаметно.
+//
+// Вместо этого здесь трогаем ТОЛЬКО объединение bbox'ов старой и новой
+// позиции курсора (CURSOR_BBOX_W x CURSOR_BBOX_H, десятки пикселей, не
+// миллионы): восстанавливаем из g_fb область старого силуэта, рисуем
+// новый, презентуем в ядро через sys_fb_present_rect() — SYS_FB_PRESENT
+// копирует в framebuffer тоже только эту область (см. syscall.c).
+// Если старая и новая позиция курсора далеко друг от друга (резкий скачок
+// — например, HMP mouse_move на весь экран при тестировании, или просто
+// очень быстрый взмах мышью), объединяющий прямоугольник обоих bbox'ов
+// может оказаться почти во весь экран — тогда частичный путь не дешевле
+// полного, а только добавляет накладные расходы сверху. Порог взят с
+// большим запасом над типичным движением курсора (CURSOR_BBOX_W x
+// CURSOR_BBOX_H с каждой стороны).
+#define PARTIAL_PRESENT_MAX_AREA (200 * 200)
+
+static void present_frame(int full) {
+    if (!full) {
+        int ox0, oy0, ox1, oy1, nx0, ny0, nx1, ny1;
+        cursor_bbox(g_last_cursor_x, g_last_cursor_y, &ox0, &oy0, &ox1, &oy1);
+        cursor_bbox(g_mouse_x, g_mouse_y, &nx0, &ny0, &nx1, &ny1);
+        int ux0 = ox0 < nx0 ? ox0 : nx0;
+        int uy0 = oy0 < ny0 ? oy0 : ny0;
+        int ux1 = ox1 > nx1 ? ox1 : nx1;
+        int uy1 = oy1 > ny1 ? oy1 : ny1;
+        if (ux0 < ux1 && uy0 < uy1 && (long)(ux1 - ux0) * (long)(uy1 - uy0) <= PARTIAL_PRESENT_MAX_AREA) {
+            present_copy_rect(ux0, uy0, ux1, uy1);
+            g_draw_target = g_present_fb;
+            draw_cursor(g_mouse_x, g_mouse_y);
+            sys_fb_present_rect(g_present_fb, g_screen_w, g_screen_h,
+                                 ux0, uy0, (unsigned)(ux1 - ux0), (unsigned)(uy1 - uy0));
+            g_last_cursor_x = g_mouse_x;
+            g_last_cursor_y = g_mouse_y;
+            g_draw_target = g_fb;
+            return;
+        }
+        // Скачок слишком большой (или вообще не было прошлой позиции) —
+        // падаем обратно на полный путь ниже.
+    }
+
     memcpy(g_present_fb, g_fb, (size_t)g_screen_w * g_screen_h * sizeof(uint32_t));
     g_draw_target = g_present_fb;
     draw_cursor(g_mouse_x, g_mouse_y);
     sys_fb_present(g_present_fb, g_screen_w, g_screen_h);
+    g_last_cursor_x = g_mouse_x;
+    g_last_cursor_y = g_mouse_y;
     g_draw_target = g_fb; // сбрасываем обратно - composite_scene() снова пишет в g_fb
 }
 
@@ -1012,6 +1113,7 @@ static void do_win_create(uint32_t owner_pid, const struct wm_request *req, stru
     // что новое окно в старом слоте могло бы родиться уже "свёрнутым".
     win->minimized = 0;
     win->maximized = 0;
+    win->bg_color = 0; // чёрный по умолчанию, пока приложение не сделает первый sys_win_fill()
 
     int n = 0;
     while (req->str[n] && n < WM_TITLE_MAX - 1) { win->title[n] = req->str[n]; n++; }
@@ -1100,6 +1202,12 @@ static void do_win_fill(uint32_t owner_pid, const struct wm_request *req, struct
     if (!w) { rep->result = -1; return; }
     uint32_t c = wm_convert_color((uint32_t)req->a[1]);
     for (int i = 0; i < w->w * w->h; i++) w->pixels[i] = c;
+    // sys_win_fill() красит окно ЦЕЛИКОМ одним цветом — почти всегда первая
+    // строка redraw() приложения (notepad/calc/sysinfo/...), так что это и
+    // есть лучшее доступное приближение к "фону окна" для будущего ресайза
+    // (resize_window_buffer() выше) — приложение само об этом не знает, но
+    // хотя бы новая площадь не чёрная, а в цвет уже нарисованного фона.
+    w->bg_color = c;
     g_content_dirty = 1;
     rep->result = 0;
 }
@@ -1256,7 +1364,7 @@ int main(void) {
     // запускается первое приложение (клик по ярлыку, см. "Ярлыки запуска
     // на рабочем столе" выше), а не набор команды в текстовой консоли.
     composite_scene();
-    present_frame();
+    present_frame(1);
     g_content_dirty = 0;
     g_cursor_moved = 0;
 
@@ -1277,9 +1385,9 @@ int main(void) {
         if (g_content_dirty) {
             composite_scene();
             g_content_dirty = 0;
-            present_frame();
+            present_frame(1);
         } else if (g_cursor_moved) {
-            present_frame();
+            present_frame(0);
         }
         g_cursor_moved = 0;
     }
