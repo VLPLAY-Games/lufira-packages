@@ -181,6 +181,7 @@ int main(void) {
         sys_close(in_pipe[1]);
         sys_close(out_pipe[0]);
         sys_close(out_pipe[1]);
+
         static char *argv[2];
         argv[0] = "/bin/shell.elf";
         argv[1] = 0;

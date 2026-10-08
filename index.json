@@ -338,8 +338,8 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 29592,
-      "sha256": "a98274f8d69ef79676020636f62e8a1b48ef54098f81922956e0028e69b96938",
+      "size": 29784,
+      "sha256": "636451512f7fb042600a499e786ffa6018938a605b7b404a9f497bba1431cda7",
       "lpg": "build/wm.lpg"
     }
   ]

@@ -82,7 +82,7 @@
 // Этап 4: "выбор программ не в отдельном окне, а на экране самом" — раньше
 // был отдельный GUI-клиент desktop.c (окно "Desktop" с кнопками), теперь
 // удалён: сам WM рисует эти ярлыки прямо в фоновом слое рабочего стола (под
-// окнами, но над заливкой фона, см. composite_and_present()) и сам же
+// окнами, но над заливкой фона, см. composite_scene()) и сам же
 // форкает/exec'ает выбранное приложение по клику. По-прежнему БЕЗ ИКОНОК
 // (прямое указание пользователя) — просто подписанные прямоугольники, тот
 // же стиль, что у кнопок таскбара.
@@ -133,11 +133,26 @@ static int g_focused = -1;
 static int g_dragging = -1;
 static int g_drag_off_x = 0, g_drag_off_y = 0;
 
-static int g_dirty = 1;
+// НАЙДЕННЫЙ БАГ (жалоба пользователя: WM грузит CPU под 100%, особенно
+// при движении мыши/печати, кулер шумит) — раньше тут был ОДИН флаг
+// g_dirty, и ЛЮБОЕ изменение (в т.ч. чистое движение курсора без единого
+// изменения содержимого) запускало composite_and_present(): полная
+// заливка всего экрана фоном + перерисовка ВСЕХ ярлыков/окон/таскбара —
+// тысячи скалярных записей пикселей на КАЖДОЕ событие мыши (а PS/2/USB
+// шлют их десятками в секунду). Разделено на два флага: g_content_dirty
+// (сцена реально изменилась - окно создано/сдвинуто/перерисовано,
+// таскбар и т.п.) запускает дорогую composite_scene(); g_cursor_moved
+// (сдвинулась только мышь) запускает дешёвый present_frame() — memcpy
+// уже готовой сцены + маленький силуэт курсора поверх, без полной
+// перерисовки. См. composite_scene()/present_frame() ниже.
+static int g_content_dirty = 1;
+static int g_cursor_moved = 0;
 static int g_mouse_x = 0, g_mouse_y = 0, g_prev_buttons = 0;
 
 static uint32_t g_screen_w = 0, g_screen_h = 0, g_pixel_format = 0;
-static uint32_t *g_fb = NULL;      // compositor-буфер экрана, malloc'd w*h
+static uint32_t *g_fb = NULL;         // сцена БЕЗ курсора, malloc'd w*h — актуальна только после composite_scene()
+static uint32_t *g_present_fb = NULL; // g_fb + курсор поверх — это и уходит в SYS_FB_PRESENT
+static uint32_t *g_draw_target = NULL; // куда сейчас пишут fb_*() ниже — g_fb во время composite_scene(), g_present_fb во время наложения курсора
 static uint8_t *g_font = NULL;     // байты глифов (SYS_FB_FONT), 8 байт/глиф
 static int g_font_glyphs = 0;      // сколько глифов реально получили (char = 32 + индекс)
 
@@ -294,14 +309,14 @@ static void fb_fill_rect(int x, int y, int w, int h, uint32_t color) {
     int x1 = x + w; if (x1 > (int)g_screen_w) x1 = (int)g_screen_w;
     int y1 = y + h; if (y1 > (int)g_screen_h) y1 = (int)g_screen_h;
     for (int py = y0; py < y1; py++) {
-        uint32_t *row = g_fb + (uint32_t)py * g_screen_w + (uint32_t)x0;
+        uint32_t *row = g_draw_target + (uint32_t)py * g_screen_w + (uint32_t)x0;
         for (int px = x0; px < x1; px++) *row++ = color;
     }
 }
 
 static void fb_set(int x, int y, uint32_t color) {
     if (x < 0 || y < 0 || (uint32_t)x >= g_screen_w || (uint32_t)y >= g_screen_h) return;
-    g_fb[(uint32_t)y * g_screen_w + (uint32_t)x] = color;
+    g_draw_target[(uint32_t)y * g_screen_w + (uint32_t)x] = color;
 }
 
 // Глиф в g_fb (экранные координаты), с фоном — для титлбара/кнопки [X].
@@ -331,7 +346,7 @@ static void fb_blit(int dst_x, int dst_y, const uint32_t *src, int sw, int sh) {
     int skip_x = x0 - dst_x, skip_y = y0 - dst_y;
     for (int py = y0; py < y1; py++) {
         const uint32_t *srow = src + (size_t)(py - y0 + skip_y) * sw + skip_x;
-        uint32_t *drow = g_fb + (size_t)py * g_screen_w + x0;
+        uint32_t *drow = g_draw_target + (size_t)py * g_screen_w + x0;
         memcpy(drow, srow, (size_t)copy_w * sizeof(uint32_t));
     }
 }
@@ -455,7 +470,7 @@ static void raise_to_top(int idx) {
 static void set_focus(int idx) {
     if (g_focused == idx) return;
     g_focused = idx;
-    g_dirty = 1;
+    g_content_dirty = 1;
 }
 
 static void queue_push(wm_window_t *w, int type, int x, int y, int key_or_button) {
@@ -492,7 +507,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
             int idx = g_order[btn_idx];
             raise_to_top(idx);
             set_focus(idx);
-            g_dirty = 1;
+            g_content_dirty = 1;
         }
         return;
     }
@@ -503,7 +518,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
             wm_window_t *w = &g_windows[idx];
             raise_to_top(idx);
             set_focus(idx);
-            g_dirty = 1;
+            g_content_dirty = 1;
 
             int close_x = w->x + outer_w(w) - WM_BORDER - WM_CLOSE_BTN_SIZE - 2;
             int close_y = w->y + (WM_TITLEBAR_HEIGHT - WM_CLOSE_BTN_SIZE) / 2;
@@ -553,7 +568,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         if (ny + outer_h(w) > max_y) ny = max_y - outer_h(w);
         if (nx != w->x || ny != w->y) {
             w->x = nx; w->y = ny;
-            g_dirty = 1;
+            g_content_dirty = 1;
         }
     }
 }
@@ -589,7 +604,11 @@ static void draw_cursor(int x, int y) {
     draw_cursor_shape(x, y, white);
 }
 
-static void composite_and_present(void) {
+// Дорогая часть: фон + ярлыки + все окна + таскбар — ТОЛЬКО когда реально
+// что-то изменилось в сцене (g_content_dirty), не на каждое шевеление
+// мыши. Пишет в g_fb (g_draw_target выставлен на него вызывающим,
+// present_frame() ниже).
+static void composite_scene(void) {
     uint32_t desktop_bg = wm_convert_color(DESKTOP_BG);
     uint32_t border_c = wm_convert_color(BORDER_COLOR);
     uint32_t titlebar_active = wm_convert_color(TITLEBAR_ACTIVE);
@@ -690,8 +709,20 @@ static void composite_and_present(void) {
         }
     }
 
+}
+
+// Дешёвая часть: копирует уже готовую сцену (g_fb) в буфер презентации
+// одним memcpy (быстрее любого числа scalar-записей пикселей), рисует
+// курсор поверх И ТОЛЬКО ЕГО, затем отправляет кадр в ядро. Вызывается
+// на КАЖДЫЙ кадр, который реально нужно показать (и после
+// composite_scene(), и при чистом движении курсора) — сама по себе на
+// порядки дешевле composite_scene().
+static void present_frame(void) {
+    memcpy(g_present_fb, g_fb, (size_t)g_screen_w * g_screen_h * sizeof(uint32_t));
+    g_draw_target = g_present_fb;
     draw_cursor(g_mouse_x, g_mouse_y);
-    sys_fb_present(g_fb, g_screen_w, g_screen_h);
+    sys_fb_present(g_present_fb, g_screen_w, g_screen_h);
+    g_draw_target = g_fb; // сбрасываем обратно - composite_scene() снова пишет в g_fb
 }
 
 // ===== Обработка клиентских RPC-запросов (WM_OP_WIN_*, wm_protocol.h) =====
@@ -733,7 +764,7 @@ static void do_win_create(uint32_t owner_pid, const struct wm_request *req, stru
 
     g_order[g_window_count++] = idx;
     set_focus(idx);
-    g_dirty = 1;
+    g_content_dirty = 1;
     rep->result = idx;
 }
 
@@ -767,7 +798,7 @@ static void destroy_window_by_index(int window_id) {
     // закрытие любого другого; отдельного возврата к текстовой консоли
     // тут больше не нужно (её восстанавливает сам кернел — process_exit(),
     // process.c — когда завершается САМ WM, см. кнопку "Exit" ниже).
-    g_dirty = 1;
+    g_content_dirty = 1;
 }
 
 static void do_win_destroy(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
@@ -801,7 +832,7 @@ static void do_win_fill(uint32_t owner_pid, const struct wm_request *req, struct
     if (!w) { rep->result = -1; return; }
     uint32_t c = wm_convert_color((uint32_t)req->a[1]);
     for (int i = 0; i < w->w * w->h; i++) w->pixels[i] = c;
-    g_dirty = 1;
+    g_content_dirty = 1;
     rep->result = 0;
 }
 
@@ -820,7 +851,7 @@ static void do_win_draw_rect(uint32_t owner_pid, const struct wm_request *req, s
         for (int px = x0; px < x1; px++)
             w->pixels[py * w->w + px] = c;
 
-    g_dirty = 1;
+    g_content_dirty = 1;
     rep->result = 0;
 }
 
@@ -833,7 +864,7 @@ static void do_win_draw_text(uint32_t owner_pid, const struct wm_request *req, s
     for (int i = 0; req->str[i]; i++)
         win_draw_glyph(w->pixels, w->w, w->h, x + i * WM_CHAR_W, y, (unsigned char)req->str[i], c);
 
-    g_dirty = 1;
+    g_content_dirty = 1;
     rep->result = 0;
 }
 
@@ -841,7 +872,7 @@ static void do_win_move(uint32_t owner_pid, const struct wm_request *req, struct
     wm_window_t *w = get_owned(owner_pid, req->a[0]);
     if (!w) { rep->result = -1; return; }
     w->x = req->a[1]; w->y = req->a[2];
-    g_dirty = 1;
+    g_content_dirty = 1;
     rep->result = 0;
 }
 
@@ -897,8 +928,10 @@ static void handle_kernel_input(const struct wm_request *req) {
         if (buttons != g_prev_buttons || g_dragging >= 0) handle_mouse_transition(mx, my, buttons);
         g_prev_buttons = buttons;
         // Тот же найденный в первом срезе баг/фикс: курсор обязан
-        // перерисовываться и на ЧИСТОЕ движение мыши, без смены кнопок.
-        if (mx != g_mouse_x || my != g_mouse_y) g_dirty = 1;
+        // перерисовываться и на ЧИСТОЕ движение мыши, без смены кнопок —
+        // но ТОЛЬКО курсор (g_cursor_moved), не вся сцена заново, см.
+        // комментарий у g_content_dirty выше.
+        if (mx != g_mouse_x || my != g_mouse_y) g_cursor_moved = 1;
         g_mouse_x = mx; g_mouse_y = my;
         return;
     }
@@ -907,6 +940,23 @@ static void handle_kernel_input(const struct wm_request *req) {
         return;
     }
 }
+
+static void dispatch_message(const struct lufira_ipc_msg *msg) {
+    const struct wm_request *req = (const struct wm_request *)msg->data;
+    if (msg->sender_pid == WM_SENDER_KERNEL) handle_kernel_input(req);
+    else handle_client_request(msg->sender_pid, req);
+}
+
+// Один логический "redraw()" клиента (gui_button_draw() и т.п.) — это
+// обычно НЕСКОЛЬКО последовательных sys_win_draw_*()/sys_win_fill()
+// вызовов подряд (каждый — свой синхронный RPC: клиент шлёт, блокируется,
+// получает ответ, шлёт следующий). Раньше composite_scene() запускалась
+// после КАЖДОГО такого вызова по отдельности — простая перерисовка
+// текстового поля в несколько вызовов пересобирала весь экран несколько
+// раз подряд (НАЙДЕННЫЙ БАГ: жалоба пользователя на загрузку CPU при
+// печати). Недолго ждём (COALESCE_WAIT_MS) следующее сообщение той же
+// пачки вместо того, чтобы пересобирать сцену на каждое из них.
+#define COALESCE_WAIT_MS 20
 
 int main(void) {
     if (sys_wm_register() != 0) return 1; // уже есть другой WM — ровно один на систему
@@ -918,7 +968,9 @@ int main(void) {
     g_pixel_format = fb_info.pixel_format;
 
     g_fb = (uint32_t *)malloc((size_t)g_screen_w * g_screen_h * sizeof(uint32_t));
-    if (!g_fb) return 1;
+    g_present_fb = (uint32_t *)malloc((size_t)g_screen_w * g_screen_h * sizeof(uint32_t));
+    if (!g_fb || !g_present_fb) return 1;
+    g_draw_target = g_fb;
 
     long font_size = sys_fb_font(NULL, 0); // max_bytes=0 — просто узнать реальный размер
     if (font_size <= 0) return 1;
@@ -935,20 +987,32 @@ int main(void) {
     // первого sys_win_create() — это и есть то, через что теперь
     // запускается первое приложение (клик по ярлыку, см. "Ярлыки запуска
     // на рабочем столе" выше), а не набор команды в текстовой консоли.
-    composite_and_present();
-    g_dirty = 0;
+    composite_scene();
+    present_frame();
+    g_content_dirty = 0;
+    g_cursor_moved = 0;
 
     for (;;) {
         struct lufira_ipc_msg msg;
-        if (sys_ipc_recv(&msg, 1) != 1) continue; // blocking=1 — всегда возвращает сообщение
+        if (sys_ipc_recv(&msg, -1) != 1) continue; // -1 — ждать первое сообщение пачки неограниченно
+        dispatch_message(&msg);
 
-        const struct wm_request *req = (const struct wm_request *)msg.data;
-        if (msg.sender_pid == WM_SENDER_KERNEL) handle_kernel_input(req);
-        else handle_client_request(msg.sender_pid, req);
+        // Коалесцируем: пока сцена дирти и кто-то продолжает слать нам
+        // сообщения почти сразу (COALESCE_WAIT_MS) — это, скорее всего,
+        // следующий вызов ТОЙ ЖЕ клиентской перерисовки, обрабатываем его
+        // тоже и откладываем пересборку сцены дальше. Как только пачка
+        // иссякла (таймаут) или сцена не менялась (чистое движение мыши
+        // между кликами) — выходим и, если нужно, рисуем один кадр.
+        while (g_content_dirty && sys_ipc_recv(&msg, COALESCE_WAIT_MS) == 1)
+            dispatch_message(&msg);
 
-        if (g_dirty) {
-            composite_and_present();
-            g_dirty = 0;
+        if (g_content_dirty) {
+            composite_scene();
+            g_content_dirty = 0;
+            present_frame();
+        } else if (g_cursor_moved) {
+            present_frame();
         }
+        g_cursor_moved = 0;
     }
 }
