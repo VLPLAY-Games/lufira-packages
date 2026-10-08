@@ -499,6 +499,23 @@ static int do_sync(void) {
     char *buf = (char *)malloc(INDEX_FETCH_CAP);
     if (!buf) { printf("dlpg: out of memory\n"); return 1; }
 
+    // НАЙДЕННЫЙ БАГ (жалоба пользователя: "dlpg sync и всё зависает
+    // полностью, нет вывода текста как в линуксе — получение списка,
+    // обработка и т.д."): sys_net_fetch() — ОДИН синхронный блокирующий
+    // syscall (DNS + TCP + TLS-рукопожатие + HTTP целиком, см. его
+    // комментарий в kernel/system/syscall/syscall.h) — ядро физически не
+    // может сообщить userspace промежуточный прогресс изнутри него (это не
+    // отдельные шаги, это один вызов), а TLS-рукопожатие (RSA-проверка
+    // подписи ServerKeyExchange — модульное возведение в степень большого
+    // числа) особенно под QEMU TCG (без аппаратного ускорения) может
+    // ощутимо занять десятки секунд — вообще без единой строчки на экране
+    // до этого это НЕ отличить от настоящего зависания. Раз сам прогресс
+    // изнутри одного syscall'а не вывести, печатаем что знаем ДО и ПОСЛЕ
+    // него — тот же принцип, что у apt: "Получение..." / "Чтение списка
+    // пакетов... Готово", а не тишина.
+    printf("dlpg: connecting to the package repository...\n");
+    printf("      (DNS + TCP + TLS handshake - may take up to a minute, especially under emulation)\n");
+
     int status = 0;
     // CAP-1 — оставляем место под собственный NUL-терминатор ниже
     // (sys_net_fetch() не NUL-terminate'ит сам — это сырые байты тела).
@@ -509,6 +526,7 @@ static int do_sync(void) {
         return 1;
     }
     buf[n] = '\0';
+    printf("dlpg: received %ld byte(s), HTTP %d\n", n, status);
 
     if (status != 200) {
         printf("dlpg: sync: server returned HTTP %d\n", status);
@@ -516,6 +534,7 @@ static int do_sync(void) {
         return 1;
     }
 
+    printf("dlpg: reading package list...\n");
     if (write_whole_file(REMOTE_INDEX_CACHE, buf, n) != 0) {
         printf("dlpg: sync: failed to save %s\n", REMOTE_INDEX_CACHE);
         free(buf);
@@ -581,6 +600,9 @@ static int do_upgrade(const char *only_name) {
                installed[local_idx].version.major, installed[local_idx].version.minor,
                installed[local_idx].version.patch,
                remote_v.major, remote_v.minor, remote_v.patch);
+        // См. комментарий в do_sync() — тот же единственный блокирующий
+        // syscall, то же "сказать, что сейчас происходит" до и после.
+        printf("dlpg: downloading %s...\n", lpg_url);
 
         uint8_t *pkgbuf = (uint8_t *)malloc(PACKAGE_FETCH_CAP);
         if (!pkgbuf) { printf("dlpg: out of memory, skipping '%s'\n", name); failed++; continue; }
@@ -593,6 +615,7 @@ static int do_upgrade(const char *only_name) {
             failed++;
             continue;
         }
+        printf("dlpg: received %ld byte(s), HTTP %d\n", n, status);
         if (status != 200) {
             printf("dlpg: upgrade '%s': server returned HTTP %d\n", name, status);
             free(pkgbuf);
@@ -608,6 +631,7 @@ static int do_upgrade(const char *only_name) {
         }
         free(pkgbuf);
 
+        printf("dlpg: installing '%s'...\n", name);
         if (do_install(DOWNLOAD_TMP_PATH, 1) == 0) upgraded++; else failed++;
         sys_unlink(DOWNLOAD_TMP_PATH);
 

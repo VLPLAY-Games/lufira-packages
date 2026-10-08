@@ -61,6 +61,33 @@ def parse_lpg_header(data: bytes):
     }
 
 
+def _publish_runtime_file(build_dir: Path, release_dir: Path, filename: str):
+    """shell.elf/libc.so — NOT .lpg packages (no header to parse, no dlpg
+    involvement: the kernel direct-stages shell.elf on every boot/respawn,
+    every package dynamically links libc.so — see their own comments in
+    LufiraOS-Builder's config.py, SHELL_ELF_PATH/LIBC_SO_PATH) — but
+    LufiraOS-Builder needs to be able to fetch them too, for the same
+    reason it fetches .lpg packages: a user who only has this repository
+    checked out (no local toolchain build of it) still needs these two
+    files to assemble a disk image. Published the same way, at a
+    predictable release/ URL, with a sha256 for integrity — just not as
+    one more entry in the "packages" array (they aren't packages).
+    Returns None if build_dir doesn't have the file (e.g. a partial/
+    packages-only build.py run) — callers should treat that as "not
+    published this time", not a hard error.
+    """
+    src = build_dir / filename
+    if not src.exists():
+        return None
+    data = src.read_bytes()
+    shutil.copyfile(src, release_dir / filename)
+    return {
+        "url": f"{RELEASE_RAW_BASE_URL}/{filename}",
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
 def build_index(repo_root: Path, build_dir: Path, release_dir: Path) -> dict:
     release_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,7 +109,17 @@ def build_index(repo_root: Path, build_dir: Path, release_dir: Path) -> dict:
         packages.append(meta)
 
     packages.sort(key=lambda p: (p["category"], p["name"]))
-    return {"packages": packages}
+
+    index = {"packages": packages}
+
+    shell_elf = _publish_runtime_file(build_dir, release_dir, "shell.elf")
+    if shell_elf:
+        index["shell_elf"] = shell_elf
+    libc_so = _publish_runtime_file(build_dir, release_dir, "libc.so")
+    if libc_so:
+        index["libc_so"] = libc_so
+
+    return index
 
 
 def write_index(index: dict, out_path: Path) -> None:
