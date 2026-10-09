@@ -118,6 +118,15 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mkdir.lpg"
     },
     {
+      "name": "mount",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 14168,
+      "sha256": "96c273e8d6107dee0f56f7ad08f252df49cb6fc72c2a773d804289006f673687",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mount.lpg"
+    },
+    {
       "name": "mv",
       "version": "1.0.0",
       "category": "base",
@@ -188,6 +197,15 @@
       "size": 14240,
       "sha256": "da76bb6acc8ab4afb4fee01dc89d536540a86b205457ec0dfb59ca173a7ccb6d",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/touch.lpg"
+    },
+    {
+      "name": "umount",
+      "version": "1.0.0",
+      "category": "base",
+      "dependencies": [],
+      "size": 14136,
+      "sha256": "74654bd743f7890561caebec08396cd059da428395e28dbd16d4af8610ad915f",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/umount.lpg"
     },
     {
       "name": "usbinfo",
