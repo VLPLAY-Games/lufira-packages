@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         case -3: printf("mount: no free mount slots\n"); break;
         case -4: printf("mount: no such device: usb%ld\n", index); break;
         case -5: printf("mount: unsupported block size\n"); break;
-        case -6: printf("mount: device too large (8 MB cap)\n"); break;
+        case -6: printf("mount: filesystem metadata too large to cache in RAM\n"); break;
         case -7: printf("mount: out of memory\n"); break;
         case -8: printf("mount: read error\n"); break;
         case -9: printf("mount: unrecognized filesystem (tried FAT, ext2, exFAT)\n"); break;
