@@ -50,6 +50,7 @@ PACKAGES = {
     "reboot": ("1.0.0", "base", []),
     "shutdown": ("1.0.0", "base", []),
     "devmode": ("1.0.0", "base", []),
+    "date": ("1.0.0", "base", []),
     # v0.7 plan, stage 5, continued — the rest of what was still only
     # reachable through the dead kernel-native kernel/shell/commands/*.c
     # (users.c/usb.c). mount/unmount stay shell builtins (shell.c), not
@@ -99,8 +100,16 @@ CRT0_SOURCE = "crt0.S"
 # SYS_WIN_* (см. lufira/gui_widgets.h) — та же единственная libc.so, не
 # отдельная библиотека (dynlink.c сегодня рассчитан ровно на одну, см.
 # его же комментарий у DT_NEEDED).
+# src/math.c — добавлена вместе с либм для doomgeneric (и не только):
+# ЕДИНСТВЕННЫЙ файл libc, который собирается без -mgeneral-regs-only (см.
+# FPU_SOURCES/SHARED_LIBC_CC_FLAGS_FPU ниже) — double по x86-64 SysV ABI
+# обязан ходить через XMM-регистры, что -mgeneral-regs-only запрещает в
+# принципе. Безопасно: kernel/system/process/process.c уже сохраняет/
+# восстанавливает FXSAVE-область на каждом переключении процесса — см.
+# длинный комментарий в LufiraOS/libc/include/math.h.
 SHARED_LIBC_SOURCES = ["src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c",
                        "src/gui_widgets.c"]
+FPU_SOURCES = ["src/math.c"]
 
 CC_FLAGS = [
     "-m64", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
@@ -118,6 +127,9 @@ SHARED_LIBC_CC_FLAGS = [
     "-mgeneral-regs-only", "-mno-red-zone", "-nostdlib",
     "-Wall", "-Wextra",
 ]
+
+# Та же база, но БЕЗ -mgeneral-regs-only — только для FPU_SOURCES выше.
+SHARED_LIBC_CC_FLAGS_FPU = [f for f in SHARED_LIBC_CC_FLAGS if f != "-mgeneral-regs-only"]
 
 
 def _run(cmd, **kw) -> None:
@@ -142,11 +154,12 @@ def compile_libc_shared(lufira_repo: Path, out_dir: Path) -> Path:
     """
     libc_dir = lufira_repo / "libc"
     flags = SHARED_LIBC_CC_FLAGS + [f"-I{libc_dir / 'include'}"]
+    flags_fpu = SHARED_LIBC_CC_FLAGS_FPU + [f"-I{libc_dir / 'include'}"]
     objs = []
-    for rel in SHARED_LIBC_SOURCES:
+    for rel in SHARED_LIBC_SOURCES + FPU_SOURCES:
         src = libc_dir / rel
         obj = out_dir / (Path(rel).stem + ".pic.o")
-        _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
+        _run(["gcc", *(flags_fpu if rel in FPU_SOURCES else flags), "-c", str(src), "-o", str(obj)])
         objs.append(obj)
 
     libc_so = out_dir / "libc.so"

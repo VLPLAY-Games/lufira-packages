@@ -174,7 +174,7 @@ static void builtin_help(void) {
     printf("Builtins: cd pwd exit help history echo clear wait su mount unmount\n");
     printf("Packages (any other name tries /bin/<name> then /bin/<name>.elf):\n");
     printf("  du df free cpuload cp mv ls mkdir rm kill ps dlpg\n");
-    printf("  cat touch write chmod chown fg bg color reset reboot shutdown devmode\n");
+    printf("  cat touch write chmod chown fg bg color reset reboot shutdown devmode date\n");
     printf("Append & to run in background (e.g. \"cpuload &\").\n");
 }
 
