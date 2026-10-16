@@ -5,8 +5,10 @@
 // process_signal(pid, SIGINT).
 //
 // Не полная замена: встроенные cd/pwd/exit/help/history/echo/clear/wait/
-// su/mount/unmount плюс любая программа из /bin. Network/sound всё ещё
-// без syscall'а — не портированы; shell.elf отвечает "unknown command".
+// su/mount/unmount плюс любая программа из /bin. Звук портирован целиком
+// (beep/mixer/music, user/, поверх SYS_SOUND_*) — сеть лишь частично: ping
+// (user/ping.c, SYS_PING) есть, ifconfig/wget — ещё нет; для них
+// shell.elf по-прежнему отвечает "unknown command".
 //
 // argv[]/envp[] для SYS_EXEC — только static, не стек: is_user_range_valid()
 // проверяет фиксированные (MAX_EXEC_ARGS+1)*8 байт от начала массива, не
@@ -226,6 +228,7 @@ static void builtin_help(void) {
     printf("Packages (any other name tries /bin/<name> then /bin/<name>.elf):\n");
     printf("  du df free cpuload cp mv ls mkdir rm kill ps dlpg\n");
     printf("  cat touch write chmod chown fg bg color reset reboot shutdown devmode date\n");
+    printf("  beep mixer music ping\n");
     printf("Append & to run in background (e.g. \"cpuload &\").\n");
 }
 

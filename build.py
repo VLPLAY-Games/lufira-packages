@@ -35,6 +35,10 @@ PACKAGES = {
     "df": ("1.0.0", "user", []),
     "free": ("1.0.0", "user", []),
     "cpuload": ("1.0.0", "user", []),
+    "beep": ("1.0.0", "user", []),
+    "mixer": ("1.0.0", "user", []),
+    "music": ("1.0.0", "user", []),
+    "ping": ("1.0.0", "user", []),
     # v0.7 plan, stage 5, continued ("as many commands out of the kernel
     # as possible") — ported from the dead kernel-native
     # kernel/shell/commands/*.c in LufiraOS.

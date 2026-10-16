@@ -439,18 +439,56 @@ static void launch_app(const char *path) {
     }
 }
 
+// Определены ниже по файлу — нужны уже здесь, в launch_fullscreen_app().
+static void composite_scene(void);
+static void present_frame(int full);
+
 // Полноэкранный захват — см. комментарий у desktop_launcher_t.fullscreen.
-// БЕЗ fork(): exec() самого WM-процесса, чтобы SYS_WM_REGISTER (и PID,
-// который за ним следит shell.c) достались новому образу напрямую.
+// БЛОКИРУЕТ вызывающего (WM) до выхода игры. Раньше это делал exec() самого
+// WM-процесса (та же задача — отдать SYS_WM_REGISTER ребёнку целиком), но
+// это НАВСЕГДА теряло исходный WM-процесс: после выхода из игры система
+// возвращалась в голую консоль, а не в WM (новый wm.elf поднимал только
+// отдельный супервизор в shell.c, и то лишь при автозапуске). Теперь —
+// честный fork(): WM явно отдаёт регистрацию (sys_wm_unregister()) ПЕРЕД
+// форком, ребёнок её тут же забирает себе (sys_wm_register() в DG_Init()),
+// родитель блокируется на sys_wait(), а после выхода игры — регистрирует
+// СЕБЯ обратно и перерисовывает рабочий стол. WM как процесс всё это время
+// жив и невредим, просто ничего не делает, пока крутится игра.
 static void launch_fullscreen_app(const char *path) {
     dbg_log("launch_fullscreen_app: "); dbg_log(path); dbg_log("\n");
-    g_launch_argv[0] = (char *)path;
-    g_launch_argv[1] = 0;
-    long er = sys_exec(path, g_launch_argv, (char **)0);
-    dbg_log_num("launch_fullscreen_app: exec FAILED er=", er);
-    // sys_exec() не возвращается при успехе — если мы здесь, запуск не
-    // удался; WM просто продолжает работать как обычно (окно/рабочий стол
-    // целы, fork() не было).
+
+    if (sys_wm_unregister() != 0) {
+        dbg_log("launch_fullscreen_app: wm_unregister FAILED (not the owner?)\n");
+        return;
+    }
+
+    long pid = sys_fork();
+    dbg_log_num("launch_fullscreen_app: fork()=", pid);
+    if (pid < 0) {
+        sys_wm_register(); // форк не удался — немедленно забираем регистрацию обратно
+        return;
+    }
+    if (pid == 0) {
+        g_launch_argv[0] = (char *)path;
+        g_launch_argv[1] = 0;
+        long er = sys_exec(path, g_launch_argv, (char **)0);
+        dbg_log_num("launch_fullscreen_app: CHILD exec FAILED er=", er);
+        sys_exit(127); // sys_exec не возвращается при успехе
+    }
+
+    // Родитель: ждём игру целиком (экран/ввод сейчас полностью её), затем
+    // забираем WM-регистрацию обратно и перерисовываем рабочий стол —
+    // framebuffer всё это время рисовала игра, его содержимое не наше.
+    int status = 0;
+    sys_wait(pid, &status, 0);
+
+    long er = sys_wm_register();
+    dbg_log_num("launch_fullscreen_app: re-register after game exit =", er);
+
+    composite_scene();
+    present_frame(1);
+    g_content_dirty = 0;
+    g_cursor_moved = 0;
 }
 
 static int launcher_rect(int i, int *x, int *y) {
