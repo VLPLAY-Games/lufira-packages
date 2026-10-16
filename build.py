@@ -243,6 +243,97 @@ def build_shell(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: Pat
     return elf
 
 
+# games/doom/ — порт doomgeneric (https://github.com/ozkl/doomgeneric),
+# ~80 исходников движка (games/doom/src/, копия апстрима без изменений —
+# все нужные платформенные отличия уже скрыты за его же собственным
+# config.h, см. комментарии в games/doom/compat/) + свой compat-слой
+# (games/doom/compat/ — FILE*/getenv/strdup/atoi/atof/sscanf, которых нет
+# в LufiraOS libc, см. его же "Никаких файловых потоков" в stdio.h) +
+# платформенный файл (games/doom/platform/doomgeneric_lufira.c — все 6
+# DG_*-функций, см. его шапку). Не влезает в build_package() (тот
+# рассчитан РОВНО на один .c на пакет) — отдельная функция, собирающая
+# все файлы руками и паковающая всё тем же lpg_pack, что и остальные
+# пакеты; "games" как category у manifest — то же самое, что "apps" у
+# settings.lpg, просто для группировки по смыслу (в lpg-формате ЛЮБАЯ
+# строка кроме "base" трактуется как LPG_CATEGORY_USER, см. lpg_pack.c).
+#
+# Единственные файлы, которым НУЖНА настоящая арифметика с float/double
+# (compat.c: atof(); остальные — живые, не мёртвый код под #if 0, куски
+# апстрима: g_game.c — счётчик FPS в статистике демо, i_video.c/v_video.c —
+# ускорение мыши) — собираются БЕЗ -mgeneral-regs-only, тем же приёмом,
+# что уже применяется к libc/src/math.c в compile_libc_shared() выше:
+# -mgeneral-regs-only — это чисто кодогенерационное ограничение одной
+# единицы трансляции, оно не меняет ABI вызова между файлами, так что
+# смешивать их в одном бинарнике безопасно (здесь так же, как уже
+# работает для libc.so).
+DOOM_FPU_FILES = {"g_game.c", "i_video.c", "m_config.c", "v_video.c", "compat.c"}
+
+
+def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
+                        crt0_obj: Path, lpg_pack_bin: Path) -> Path:
+    doom_dir = repo_root / "games" / "doom"
+    src_dir = doom_dir / "src"
+    compat_dir = doom_dir / "compat"
+    platform_dir = doom_dir / "platform"
+    wad_path = doom_dir / "assets" / "doom1.wad"
+
+    # compat_dir ПЕРВЫМ: его заголовки (stdio.h/stdlib.h/string.h и т.д.)
+    # сами делают #include_next <...> — это должно найти НАСТОЯЩИЙ
+    # одноимённый заголовок LufiraOS libc, который обязан идти в -I СТРОГО
+    # после compat_dir, не до.
+    include_flags = [
+        f"-I{compat_dir}",
+        f"-I{src_dir}",
+        f"-I{platform_dir}",
+        f"-I{lufira_repo / 'libc' / 'include'}",
+    ]
+    base_flags = [
+        "-m64", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
+        "-mno-red-zone", "-nostdlib", "-static", "-Wall", "-Wextra",
+        # == SCREENWIDTH/SCREENHEIGHT (320x200) — родной fb_scaling
+        # движка тогда всегда 1 (без его собственного масштабирования);
+        # настоящее увеличение под реальное разрешение экрана (заранее не
+        # известное) делает сам doomgeneric_lufira.c во время кадра.
+        "-DDOOMGENERIC_RESX=320", "-DDOOMGENERIC_RESY=200",
+    ] + include_flags
+    fpu_flags = base_flags
+    nofpu_flags = base_flags + ["-mgeneral-regs-only"]
+
+    obj_dir = out_dir / "doom_obj"
+    obj_dir.mkdir(parents=True, exist_ok=True)
+
+    sources = (sorted(src_dir.glob("*.c")) +
+               [platform_dir / "doomgeneric_lufira.c", compat_dir / "compat.c"])
+    objs = []
+    for src in sources:
+        flags = fpu_flags if src.name in DOOM_FPU_FILES else nofpu_flags
+        obj = obj_dir / (src.stem + ".o")
+        _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
+        objs.append(obj)
+
+    elf = out_dir / "doom.elf"
+    _run(["ld", "-m", "elf_x86_64", "-nostdlib", "-no-pie",
+          "-dynamic-linker", "/lib/ld.so",
+          "-o", str(elf), str(crt0_obj), *[str(o) for o in objs],
+          "-L", str(out_dir), "-lc"])
+
+    manifest = (
+        "name=doom\n"
+        "version=1.0.0\n"
+        "category=games\n"
+        "depends=\n"
+        "[files]\n"
+        f"{elf} /bin/doom.elf 755\n"
+        f"{wad_path} /usr/share/doom1.wad 644\n"
+    )
+    manifest_path = out_dir / "doom.manifest"
+    manifest_path.write_text(manifest)
+
+    lpg_path = out_dir / "doom.lpg"
+    _run([str(lpg_pack_bin), str(manifest_path), str(lpg_path)])
+    return lpg_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lufira-repo", type=Path,
@@ -277,6 +368,10 @@ def main() -> None:
     print("=== Building shell.elf (direct-stage, not a package) ===")
     shell_elf = build_shell(repo_root, args.lufira_repo, out_dir, crt0_obj)
     print(f"  built {shell_elf}")
+
+    print("=== Building doom.lpg (doomgeneric port) ===")
+    doom_lpg = build_doom_package(repo_root, args.lufira_repo, out_dir, crt0_obj, lpg_pack_bin)
+    print(f"  built {doom_lpg}")
 
     print("=== Regenerating index.json + release/ ===")
     release_dir = repo_root / "release"

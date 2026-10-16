@@ -298,6 +298,15 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/df.lpg"
     },
     {
+      "name": "doom",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 4771552,
+      "sha256": "54e2214784479edc9916dcf000f79a86c2cd36e4fdee758c2c3bf6205e8a7a73",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/doom.lpg"
+    },
+    {
       "name": "du",
       "version": "1.0.0",
       "category": "user",
@@ -386,7 +395,7 @@
   },
   "libc_so": {
     "url": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/libc.so",
-    "size": 29592,
-    "sha256": "7d5d933e4a70363d4fcf5a5a84e4896ca793957a922388cfd1a5c21c7af0f2c8"
+    "size": 29632,
+    "sha256": "902b019752cf4607094889daccbcb6acfe926d746d50100676daedd03b8e630f"
   }
 }
