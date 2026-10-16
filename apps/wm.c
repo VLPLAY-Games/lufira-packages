@@ -83,6 +83,7 @@ static const desktop_launcher_t g_launchers[] = {
     {"Files",    "/bin/files.elf"},
     {"Calc",     "/bin/calc.elf"},
     {"Sys Info", "/bin/sysinfo.elf"},
+    {"Settings", "/bin/settings.elf"},
 };
 #define NUM_LAUNCHERS ((int)(sizeof(g_launchers) / sizeof(g_launchers[0])))
 

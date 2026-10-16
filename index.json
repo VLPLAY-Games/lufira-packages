@@ -334,6 +334,15 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/notepad.lpg"
     },
     {
+      "name": "settings",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "size": 20984,
+      "sha256": "935baec6f168560d31275f7c8398e489e3a74640ff4bb6400bdd0461e39c47f2",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/settings.lpg"
+    },
+    {
       "name": "sysinfo",
       "version": "1.0.0",
       "category": "user",
@@ -366,14 +375,14 @@
       "category": "user",
       "dependencies": [],
       "size": 35136,
-      "sha256": "21f8165110c9ec6717558c6ae8759d75829d7e0fafbd22930129ac86dc654d05",
+      "sha256": "81304f880f147bf80a16ccb331f77fadc09199e3080ead3d65d426fd3a95d40a",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/wm.lpg"
     }
   ],
   "shell_elf": {
     "url": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/shell.elf",
-    "size": 20024,
-    "sha256": "85ba7d31bc00949e5b3c1383a683d89715c5eccd88d905ee4b9891f5709a8d80"
+    "size": 20152,
+    "sha256": "33561cd6f24f815d2c1e96aa5c6086280b58e19d01916f5270a6e3447007d9b0"
   },
   "libc_so": {
     "url": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/libc.so",

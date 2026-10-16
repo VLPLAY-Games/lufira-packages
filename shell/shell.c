@@ -150,6 +150,31 @@ static long run_child(const char *path, char *const argv[]) {
     return pid;
 }
 
+// Автозапуск WM — переключается чекбоксом "Launch GUI automatically" во
+// вкладке Autostart приложения Settings (apps/settings.c): наличие файла
+// (а не его содержимое) значит "включено", тот же приём, что уже
+// использует devmode (/system/devmode.flag, devmode_probe_early() в
+// kernel.c). Только для PID 1 — он всегда ровно тот самый ПЕРВЫЙ шелл,
+// которого спавнит само ядро при загрузке (spawn_shell_process(),
+// kernel.c); вложенные shell.elf — например тот, что forkает/exec'ает
+// apps/terminal.c для GUI-терминала внутри уже запущенного WM — НЕ должны
+// повторно запускать второй WM.
+#define WM_AUTOSTART_PATH "/etc/wm_autostart"
+
+static void maybe_autostart_wm(void) {
+    if (sys_getpid() != 1) return;
+
+    long flag_fd = sys_open(WM_AUTOSTART_PATH, O_RDONLY, 0);
+    if (flag_fd < 0) return;
+    sys_close((int)flag_fd);
+
+    // static, НЕ на стеке — см. разбор в шапке файла: is_user_range_valid()
+    // проверяет фиксированный диапазон от начала argv, маленький
+    // стековый массив у верха стека мог бы эту проверку не пройти.
+    static char *wm_argv[] = {"/bin/wm.elf", NULL};
+    run_child("/bin/wm.elf", wm_argv);
+}
+
 static void dispatch(int argc, char *argv[]);
 
 /* ===================== встроенные команды ===================== */
@@ -295,6 +320,7 @@ static void redraw_line(const char *line, int old_len, int old_cursor, int new_l
 
 int main(void) {
     lookup_user();
+    maybe_autostart_wm();
 
     char line[LINE_MAX];
 

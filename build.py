@@ -86,6 +86,11 @@ PACKAGES = {
     "calc": ("1.0.0", "apps", []),
     "sysinfo": ("1.0.0", "apps", []),
     "terminal": ("1.0.0", "apps", []),
+    # v0.9: "Settings" — одно окно с вкладками (Audio/Programs/Autostart/
+    # System) поверх SYS_SOUND_INFO/SYS_SOUND_SET_VOLUME (новые syscall'ы,
+    # см. LufiraOS/kernel/system/syscall/syscall.h) и уже существующих
+    # SYS_MEMINFO/SYS_STATFS/SYS_CPULOAD/SYS_PSLIST.
+    "settings": ("1.0.0", "apps", []),
 }
 
 # v0.8-мост, пункт 8 (динамическая линковка): crt0.S остаётся статически
