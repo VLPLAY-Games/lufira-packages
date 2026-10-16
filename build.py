@@ -113,7 +113,7 @@ CRT0_SOURCE = "crt0.S"
 # восстанавливает FXSAVE-область на каждом переключении процесса — см.
 # длинный комментарий в LufiraOS/libc/include/math.h.
 SHARED_LIBC_SOURCES = ["src/string.c", "src/malloc.c", "src/printf.c", "src/stdlib.c",
-                       "src/gui_widgets.c"]
+                       "src/gui_widgets.c", "src/vsnprintf.c"]
 FPU_SOURCES = ["src/math.c"]
 
 CC_FLAGS = [

@@ -1289,8 +1289,10 @@ static void handle_kernel_input(const struct wm_request *req) {
         // Экран всегда принадлежит WM — клавиша идёт сфокусированному окну,
         // либо, без фокуса, просто проглатывается (как в любой оконной системе:
         // клик по пустому столу снимает фокус, печать после этого никуда не идёт).
-        if (g_focused >= 0 && g_windows[g_focused].in_use)
-            queue_push(&g_windows[g_focused], LUFIRA_GUI_EVENT_KEY, 0, 0, req->a[0]);
+        if (g_focused >= 0 && g_windows[g_focused].in_use) {
+            int type = req->a[1] ? LUFIRA_GUI_EVENT_KEY : LUFIRA_GUI_EVENT_KEYUP;
+            queue_push(&g_windows[g_focused], type, 0, 0, req->a[0]);
+        }
         return;
     }
     if (req->opcode == WM_INPUT_MOUSE) {
