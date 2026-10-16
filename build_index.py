@@ -28,7 +28,7 @@ _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _DEP_FMT = "<32sHHH"
 _DEP_SIZE = struct.calcsize(_DEP_FMT)
 
-CATEGORY_NAMES = {0: "base", 1: "user"}
+CATEGORY_NAMES = {0: "base", 1: "user", 2: "games"}
 
 # Тот же репозиторий/ветка, что REMOTE_INDEX_URL в dlpg.c.
 RELEASE_RAW_BASE_URL = (

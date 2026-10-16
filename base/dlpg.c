@@ -3,8 +3,12 @@
 // существующих OPEN/READ/WRITE/CLOSE/SEEK/CHMOD/MKDIR/UNLINK.
 //
 // Подкоманды:
-//   dlpg install <path.lpg>   — установить новый пакет (отказ, если уже есть)
-//   dlpg update  <path.lpg>   — установить/обновить (не отказывает, если уже есть)
+//   dlpg install <path.lpg|name> — установить новый пакет: из локального
+//                                  файла, либо (если аргумент не похож на
+//                                  путь) по имени из закэшированного
+//                                  REMOTE_INDEX_CACHE — см. do_install_from_repo()
+//                                  (отказ, если уже есть)
+//   dlpg update  <path.lpg|name> — то же самое, но не отказывает, если уже есть
 //   dlpg list                 — показать установленные пакеты
 //   dlpg remove  <name>       — удалить пакет и все его файлы
 //   dlpg sync                 — скачать список пакетов (REMOTE_INDEX_URL), сохранить локально
@@ -145,7 +149,9 @@ static int load_installed(installed_entry_t *out) {
                 memset(&out[count], 0, sizeof(out[count]));
                 strncpy(out[count].name, fields[0], LPG_NAME_MAX - 1);
                 out[count].version = parse_version_str(fields[1]);
-                out[count].category = (strcmp(fields[2], "base") == 0) ? LPG_CATEGORY_BASE : LPG_CATEGORY_USER;
+                out[count].category = (strcmp(fields[2], "base") == 0) ? LPG_CATEGORY_BASE :
+                                       (strcmp(fields[2], "games") == 0) ? LPG_CATEGORY_GAMES :
+                                       LPG_CATEGORY_USER;
                 count++;
             }
         }
@@ -162,7 +168,8 @@ static int save_installed(installed_entry_t *entries, int count) {
         int n = 0;
         // Собираем строку вручную (нет snprintf в этой freestanding libc) —
         // тот же приём, что уже у users.c/build_user_line().
-        const char *cat = (entries[i].category == LPG_CATEGORY_BASE) ? "base" : "user";
+        const char *cat = (entries[i].category == LPG_CATEGORY_BASE) ? "base" :
+                          (entries[i].category == LPG_CATEGORY_GAMES) ? "games" : "user";
         char line[128];
         // "name:major.minor.patch:category\n"
         int p2 = 0;
@@ -319,9 +326,11 @@ static int do_list(void) {
     if (count == 0) { printf("No packages installed.\n"); return 0; }
 
     for (int i = 0; i < count; i++) {
+        const char *cat = installed[i].category == LPG_CATEGORY_BASE ? "base" :
+                          installed[i].category == LPG_CATEGORY_GAMES ? "games" : "user";
         printf("%s %u.%u.%u (%s)\n", installed[i].name,
                installed[i].version.major, installed[i].version.minor, installed[i].version.patch,
-               installed[i].category == LPG_CATEGORY_BASE ? "base" : "user");
+               cat);
     }
     return 0;
 }
@@ -514,6 +523,76 @@ static int do_sync(void) {
     return 0;
 }
 
+// dlpg install <name> (не путь к .lpg-файлу) — ищет пакет в закэшированном
+// REMOTE_INDEX_CACHE (см. do_sync()), скачивает его "lpg"-URL тем же
+// SYS_NET_FETCH и ставит как обычно через do_install(). Раньше install умел
+// работать только с локальным файлом — единственным способом поставить
+// НОВЫЙ пакет из репозитория было вручную скачать .lpg где-то ещё и
+// скормить путь сюда; do_upgrade() уже качает .lpg по сети, но только для
+// уже установленных пакетов — здесь та же логика для первой установки.
+static int do_install_from_repo(const char *name, int allow_existing) {
+    long idx_len;
+    char *idx = read_whole_file(REMOTE_INDEX_CACHE, &idx_len);
+    if (!idx) {
+        printf("dlpg: no local package index — run 'dlpg sync' first\n");
+        return 1;
+    }
+
+    const char *cursor = json_packages_array_start(idx);
+    if (!cursor) {
+        printf("dlpg: remote index malformed (no 'packages' array) — try 'dlpg sync' again\n");
+        free(idx);
+        return 1;
+    }
+
+    char lpg_url[256];
+    int found = 0;
+    const char *obj_start, *obj_end;
+    while (json_next_object(&cursor, &obj_start, &obj_end)) {
+        char pkg_name[LPG_NAME_MAX];
+        if (json_get_string(obj_start, obj_end, "name", pkg_name, sizeof(pkg_name)) != 0) continue;
+        if (strcmp(pkg_name, name) != 0) continue;
+        if (json_get_string(obj_start, obj_end, "lpg", lpg_url, sizeof(lpg_url)) != 0) continue;
+        found = 1;
+        break;
+    }
+    free(idx);
+
+    if (!found) {
+        printf("dlpg: package '%s' not found in the package index\n", name);
+        return 1;
+    }
+
+    printf("dlpg: downloading %s...\n", lpg_url);
+    uint8_t *pkgbuf = (uint8_t *)malloc(PACKAGE_FETCH_CAP);
+    if (!pkgbuf) { printf("dlpg: out of memory\n"); return 1; }
+
+    int status = 0;
+    long n = sys_net_fetch(lpg_url, pkgbuf, PACKAGE_FETCH_CAP, &status);
+    if (n < 0) {
+        print_fetch_error("dlpg: install", n);
+        free(pkgbuf);
+        return 1;
+    }
+    printf("dlpg: received %ld byte(s), HTTP %d\n", n, status);
+    if (status != 200) {
+        printf("dlpg: install '%s': server returned HTTP %d\n", name, status);
+        free(pkgbuf);
+        return 1;
+    }
+
+    if (write_whole_file(DOWNLOAD_TMP_PATH, pkgbuf, n) != 0) {
+        printf("dlpg: install '%s': failed to stage download\n", name);
+        free(pkgbuf);
+        return 1;
+    }
+    free(pkgbuf);
+
+    int rc = do_install(DOWNLOAD_TMP_PATH, allow_existing);
+    sys_unlink(DOWNLOAD_TMP_PATH);
+    return rc;
+}
+
 // only_name — NULL = обновить всё установленное, иначе один пакет.
 // upgrade никогда не ставит новый пакет (это дело install/sync) — только
 // обновляет уже установленные.
@@ -608,8 +687,8 @@ static int do_upgrade(const char *only_name) {
 /* ===================== main ===================== */
 
 static void print_usage(void) {
-    printf("Usage: dlpg install <path.lpg>\n");
-    printf("       dlpg update  <path.lpg>\n");
+    printf("Usage: dlpg install <path.lpg|name>\n");
+    printf("       dlpg update  <path.lpg|name>\n");
     printf("       dlpg list\n");
     printf("       dlpg remove  <name>\n");
     printf("       dlpg sync\n");
@@ -626,7 +705,16 @@ int main(int argc, char **argv) {
     const char *subcmd = argv[1];
     if (strcmp(subcmd, "install") == 0 || strcmp(subcmd, "update") == 0) {
         if (argc < 3) { print_usage(); return 1; }
-        return do_install(argv[2], strcmp(subcmd, "update") == 0);
+        int allow_existing = strcmp(subcmd, "update") == 0;
+        const char *arg = argv[2];
+        // ".lpg" или "/" в аргументе — локальный путь к файлу (старое
+        // поведение); иначе это имя пакета из репозитория (см.
+        // do_install_from_repo() выше).
+        int looks_like_path = strstr(arg, ".lpg") != NULL || strchr(arg, '/') != NULL;
+        if (looks_like_path) {
+            return do_install(arg, allow_existing);
+        }
+        return do_install_from_repo(arg, allow_existing);
     } else if (strcmp(subcmd, "list") == 0) {
         return do_list();
     } else if (strcmp(subcmd, "remove") == 0) {

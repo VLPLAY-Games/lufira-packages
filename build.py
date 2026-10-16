@@ -268,6 +268,13 @@ def build_shell(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: Pat
 # работает для libc.so).
 DOOM_FPU_FILES = {"g_game.c", "i_video.c", "m_config.c", "v_video.c", "compat.c"}
 
+# doom не в PACKAGES выше (свой build_doom_package(), не общий build_package()) —
+# но LufiraOS-Builder's gui.py._load_package_catalog_local() всё равно должно
+# видеть его версию/категорию для чекбокса в разделе "games", поэтому они —
+# именованные константы, а не литералы прямо в манифесте ниже.
+DOOM_PACKAGE_VERSION = "1.0.0"
+DOOM_PACKAGE_CATEGORY = "games"
+
 
 def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
                         crt0_obj: Path, lpg_pack_bin: Path) -> Path:
@@ -295,6 +302,10 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
         # настоящее увеличение под реальное разрешение экрана (заранее не
         # известное) делает сам doomgeneric_lufira.c во время кадра.
         "-DDOOMGENERIC_RESX=320", "-DDOOMGENERIC_RESY=200",
+        # Включает dispatch на DG_sound_module/DG_music_module в i_sound.c
+        # (вендорный файл, не трогаем) — сами структуры реализованы в
+        # platform/doomgeneric_sound_lufira.c, НЕ в апстриме.
+        "-DFEATURE_SOUND",
     ] + include_flags
     fpu_flags = base_flags
     nofpu_flags = base_flags + ["-mgeneral-regs-only"]
@@ -303,7 +314,9 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
     obj_dir.mkdir(parents=True, exist_ok=True)
 
     sources = (sorted(src_dir.glob("*.c")) +
-               [platform_dir / "doomgeneric_lufira.c", compat_dir / "compat.c"])
+               [platform_dir / "doomgeneric_lufira.c",
+                platform_dir / "doomgeneric_sound_lufira.c",
+                compat_dir / "compat.c"])
     objs = []
     for src in sources:
         flags = fpu_flags if src.name in DOOM_FPU_FILES else nofpu_flags
@@ -319,8 +332,8 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
 
     manifest = (
         "name=doom\n"
-        "version=1.0.0\n"
-        "category=games\n"
+        f"version={DOOM_PACKAGE_VERSION}\n"
+        f"category={DOOM_PACKAGE_CATEGORY}\n"
         "depends=\n"
         "[files]\n"
         f"{elf} /bin/doom.elf 755\n"

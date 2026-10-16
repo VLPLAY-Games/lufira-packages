@@ -161,6 +161,31 @@ static long run_child(const char *path, char *const argv[]) {
 // повторно запускать второй WM.
 #define WM_AUTOSTART_PATH "/etc/wm_autostart"
 
+// Супервизор WM: форкает wm.elf, блокируется на sys_wait() именно этого
+// PID, и при его завершении — перезапускает. Нужен из-за "полноэкранного
+// захвата" (apps/wm.c: launch_fullscreen_app(), doom.elf) — ярлык игры
+// exec()-ом ПОДМЕНЯЕТ сам процесс wm.elf (без fork, тот же PID — чтобы
+// SYS_WM_REGISTER достался новому образу бесплатно, см. комментарий в
+// DG_Init(), games/doom/platform/doomgeneric_lufira.c). Без этого цикла
+// выход из игры (или падение самого wm.elf по любой другой причине)
+// насовсем убивал бы весь рабочий стол. Сам процесс-супервизор отдельный
+// (форкнут из PID 1) — родительский шелл (PID 1) не блокируется и
+// продолжает свой обычный интерактивный цикл как ни в чём не бывало (его
+// sys_read(0,...) всё равно не получает ничего, пока ввод с клавиатуры
+// перехвачен зарегистрированным WM — см. SYS_WM_REGISTER/SYS_IPC_RECV).
+static void wm_supervisor_loop(void) {
+    static char *wm_argv[] = {"/bin/wm.elf", NULL};
+    for (;;) {
+        long pid = run_child("/bin/wm.elf", wm_argv);
+        if (pid < 0) { sys_msleep(1000); continue; } // fork() не удался — не крутим вхолостую
+
+        int status = 0;
+        sys_wait(pid, &status, 0);
+        // wm.elf (или то, во что он себя подменил exec()ом — doom.elf)
+        // завершился — перезапускаем, рабочий стол не должен пропадать насовсем.
+    }
+}
+
 static void maybe_autostart_wm(void) {
     if (sys_getpid() != 1) return;
 
@@ -168,11 +193,12 @@ static void maybe_autostart_wm(void) {
     if (flag_fd < 0) return;
     sys_close((int)flag_fd);
 
-    // static, НЕ на стеке — см. разбор в шапке файла: is_user_range_valid()
-    // проверяет фиксированный диапазон от начала argv, маленький
-    // стековый массив у верха стека мог бы эту проверку не пройти.
-    static char *wm_argv[] = {"/bin/wm.elf", NULL};
-    run_child("/bin/wm.elf", wm_argv);
+    long pid = sys_fork();
+    if (pid < 0) return; // не смогли форкнуть супервизора — просто не автозапускаем
+    if (pid == 0) {
+        wm_supervisor_loop(); // не возвращается
+        sys_exit(0);
+    }
 }
 
 static void dispatch(int argc, char *argv[]);

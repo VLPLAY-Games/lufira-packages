@@ -77,8 +77,8 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "size": 23792,
-      "sha256": "c179a44097884c734cb5ac5d05084d160065476d01c004ccbdd49528baf0f4ca",
+      "size": 23880,
+      "sha256": "95c2fb453719d685b4854ca9fc1199c920833af9b94e1aee9c4e9d3b09af0612",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/dlpg.lpg"
     },
     {
@@ -271,6 +271,15 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/write.lpg"
     },
     {
+      "name": "doom",
+      "version": "1.0.0",
+      "category": "games",
+      "dependencies": [],
+      "size": 4777336,
+      "sha256": "7376acc156a07f6b45e997d8e4b63cd22d85367e4b61c7bc4955592ee3a6a0d9",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/doom.lpg"
+    },
+    {
       "name": "calc",
       "version": "1.0.0",
       "category": "user",
@@ -296,15 +305,6 @@
       "size": 14128,
       "sha256": "9f6c7ed065b8f523752a1250ca7c171ed93e3bd79dd8bf1c2d8aadbd52bc0800",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/df.lpg"
-    },
-    {
-      "name": "doom",
-      "version": "1.0.0",
-      "category": "user",
-      "dependencies": [],
-      "size": 4771552,
-      "sha256": "54e2214784479edc9916dcf000f79a86c2cd36e4fdee758c2c3bf6205e8a7a73",
-      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/doom.lpg"
     },
     {
       "name": "du",
@@ -348,7 +348,7 @@
       "category": "user",
       "dependencies": [],
       "size": 20984,
-      "sha256": "935baec6f168560d31275f7c8398e489e3a74640ff4bb6400bdd0461e39c47f2",
+      "sha256": "3f3b189f13a0abc1251c89d41e13f0c8f31d96f42d8cab84fb6318b0bb63d69c",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/settings.lpg"
     },
     {
@@ -383,15 +383,15 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "size": 35136,
-      "sha256": "b609c4122a4c544be524b7e82909c593d9d5ec3d22b7cbd384b9be90977965a0",
+      "size": 35184,
+      "sha256": "f3204c8effabe4e4f8af903c6f3cda857a137052b4738f04262a95b54e5151cf",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/wm.lpg"
     }
   ],
   "shell_elf": {
     "url": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/shell.elf",
-    "size": 20152,
-    "sha256": "33561cd6f24f815d2c1e96aa5c6086280b58e19d01916f5270a6e3447007d9b0"
+    "size": 20232,
+    "sha256": "c54341b47d7025e8a56e44cb83bdbf9efb48547bd079241ba03cfd66e6ae6205"
   },
   "libc_so": {
     "url": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/libc.so",

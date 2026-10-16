@@ -75,15 +75,25 @@
 typedef struct {
     const char *label;
     const char *path;
+    // 0 — обычное окно (fork()+exec(), остаётся дочерним процессом WM,
+    // как и раньше). 1 — полноэкранный захват (doom.elf): сам WM
+    // exec()-ом ПОДМЕНЯЕТ себя этой программой (без fork — тот же PID),
+    // так что SYS_WM_REGISTER (который держит WM) переходит новому образу
+    // процесса бесплатно — см. комментарий в DG_Init(),
+    // games/doom/platform/doomgeneric_lufira.c. Невозвратно для ЭТОГО
+    // процесса; shell.c (maybe_autostart_wm()) следит за тем же PID и
+    // перезапускает wm.elf, когда он (т.е. теперь уже doom.elf) завершится.
+    int fullscreen;
 } desktop_launcher_t;
 
 static const desktop_launcher_t g_launchers[] = {
-    {"Terminal", "/bin/terminal.elf"},
-    {"Notepad",  "/bin/notepad.elf"},
-    {"Files",    "/bin/files.elf"},
-    {"Calc",     "/bin/calc.elf"},
-    {"Sys Info", "/bin/sysinfo.elf"},
-    {"Settings", "/bin/settings.elf"},
+    {"Terminal", "/bin/terminal.elf", 0},
+    {"Notepad",  "/bin/notepad.elf",  0},
+    {"Files",    "/bin/files.elf",    0},
+    {"Calc",     "/bin/calc.elf",     0},
+    {"Sys Info", "/bin/sysinfo.elf",  0},
+    {"Settings", "/bin/settings.elf", 0},
+    {"Doom",     "/bin/doom.elf",     1},
 };
 #define NUM_LAUNCHERS ((int)(sizeof(g_launchers) / sizeof(g_launchers[0])))
 
@@ -429,6 +439,20 @@ static void launch_app(const char *path) {
     }
 }
 
+// Полноэкранный захват — см. комментарий у desktop_launcher_t.fullscreen.
+// БЕЗ fork(): exec() самого WM-процесса, чтобы SYS_WM_REGISTER (и PID,
+// который за ним следит shell.c) достались новому образу напрямую.
+static void launch_fullscreen_app(const char *path) {
+    dbg_log("launch_fullscreen_app: "); dbg_log(path); dbg_log("\n");
+    g_launch_argv[0] = (char *)path;
+    g_launch_argv[1] = 0;
+    long er = sys_exec(path, g_launch_argv, (char **)0);
+    dbg_log_num("launch_fullscreen_app: exec FAILED er=", er);
+    // sys_exec() не возвращается при успехе — если мы здесь, запуск не
+    // удался; WM просто продолжает работать как обычно (окно/рабочий стол
+    // целы, fork() не было).
+}
+
 static int launcher_rect(int i, int *x, int *y) {
     if (i < 0 || i >= NUM_LAUNCHERS) return 0;
     *x = LAUNCHER_START_X;
@@ -443,7 +467,8 @@ static int try_launch_desktop_icon(int mx, int my) {
         int x, y;
         launcher_rect(i, &x, &y);
         if (mx >= x && mx < x + LAUNCHER_ICON_W && my >= y && my < y + LAUNCHER_ICON_H) {
-            launch_app(g_launchers[i].path);
+            if (g_launchers[i].fullscreen) launch_fullscreen_app(g_launchers[i].path);
+            else launch_app(g_launchers[i].path);
             return 1;
         }
     }
