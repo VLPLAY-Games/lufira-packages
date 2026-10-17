@@ -11,13 +11,14 @@
 #define WIN_W 420
 #define WIN_H 380
 
-#define TAB_COUNT 4
+#define TAB_COUNT 5
 #define TAB_AUDIO     0
 #define TAB_PROGRAMS  1
 #define TAB_AUTOSTART 2
 #define TAB_SYSTEM    3
+#define TAB_ABOUT     4
 
-static const char *const TAB_LABELS[TAB_COUNT] = {"Audio", "Programs", "Autostart", "System"};
+static const char *const TAB_LABELS[TAB_COUNT] = {"Audio", "Programs", "Autostart", "System", "About"};
 static gui_button_t g_tab_btn[TAB_COUNT];
 static int g_active_tab = TAB_AUDIO;
 
@@ -118,6 +119,7 @@ static int audio_click(int win, int x, int y) {
 
 static gui_listbox_t g_pkg_list;
 static char g_pkg_count_line[32];
+static gui_button_t g_pkg_scroll_up_btn, g_pkg_scroll_down_btn;
 
 static void programs_load(void) {
     gui_listbox_clear(&g_pkg_list);
@@ -185,10 +187,14 @@ static void programs_load(void) {
 static void programs_draw(int win) {
     sys_win_draw_text(win, 16, CONTENT_Y + 2, g_pkg_count_line, TEXT_DIM);
     gui_listbox_draw(win, &g_pkg_list);
+    gui_button_draw(win, &g_pkg_scroll_up_btn);
+    gui_button_draw(win, &g_pkg_scroll_down_btn);
 }
 
 static int programs_click(int win, int x, int y) {
     (void)win;
+    if (gui_button_contains(&g_pkg_scroll_up_btn, x, y)) return gui_listbox_scroll(&g_pkg_list, -3);
+    if (gui_button_contains(&g_pkg_scroll_down_btn, x, y)) return gui_listbox_scroll(&g_pkg_list, 3);
     return gui_listbox_click(&g_pkg_list, x, y) >= 0;
 }
 
@@ -329,14 +335,63 @@ static int system_click(int win, int x, int y) {
 }
 
 /* ======================================================================== */
+/* Вкладка About — SYS_OS_VERSION (версия/дата сборки ЯДРА) + статика        */
+/* ======================================================================== */
+
+static char g_about_version_line[32];
+static char g_about_build_line[32];
+
+static void about_load(void) {
+    struct lufira_os_version v;
+    if (sys_os_version(&v) != 0) {
+        g_about_version_line[0] = '\0';
+        g_about_build_line[0] = '\0';
+        return;
+    }
+
+    int p = 0;
+    append_str(g_about_version_line, &p, "Version: ");
+    append_ulong(g_about_version_line, &p, v.major);
+    append_str(g_about_version_line, &p, ".");
+    append_ulong(g_about_version_line, &p, v.minor);
+    append_str(g_about_version_line, &p, ".");
+    append_ulong(g_about_version_line, &p, v.patch);
+
+    p = 0;
+    append_str(g_about_build_line, &p, "Built: ");
+    append_str(g_about_build_line, &p, v.build_date);
+    append_str(g_about_build_line, &p, " ");
+    append_str(g_about_build_line, &p, v.build_time);
+}
+
+static void about_draw(int win) {
+    sys_win_draw_text(win, 16, CONTENT_Y + 10, "LufiraOS", ACCENT_FG);
+    sys_win_draw_text(win, 16, CONTENT_Y + 34, g_about_version_line, TEXT_FG);
+    sys_win_draw_text(win, 16, CONTENT_Y + 54, g_about_build_line, TEXT_FG);
+    sys_win_draw_text(win, 16, CONTENT_Y + 74, "Architecture: x86_64", TEXT_FG);
+    sys_win_draw_text(win, 16, CONTENT_Y + 98, "Developer: VLPLAY-Games", TEXT_DIM);
+    sys_win_draw_text(win, 16, CONTENT_Y + 122, "https://github.com/VLPLAY-Games/LufiraOS", TEXT_DIM);
+}
+
+static int about_click(int win, int x, int y) {
+    (void)win; (void)x; (void)y;
+    return 0;
+}
+
+/* ======================================================================== */
 /* Переключение вкладок + общий цикл окна                                   */
 /* ======================================================================== */
 
 static void tabs_init(void) {
+    // Ширина посчитана под TAB_COUNT, а не захардкожена — при добавлении
+    // "About" пятая вкладка в фиксированные 95px уже не влезала бы в
+    // WIN_W (живой баг при первой попытке: вкладки вылезали за окно).
+    int gap = 5;
+    int tab_w = (WIN_W - 20 - (TAB_COUNT - 1) * gap) / TAB_COUNT;
     int x = 10;
     for (int i = 0; i < TAB_COUNT; i++) {
-        gui_button_init(&g_tab_btn[i], x, 8, 95, 28, TAB_LABELS[i]);
-        x += 95 + 5;
+        gui_button_init(&g_tab_btn[i], x, 8, tab_w, 28, TAB_LABELS[i]);
+        x += tab_w + gap;
     }
 }
 
@@ -357,6 +412,7 @@ static void redraw(int win) {
         case TAB_PROGRAMS:  programs_draw(win);  break;
         case TAB_AUTOSTART: autostart_draw(win); break;
         case TAB_SYSTEM:    system_draw(win);    break;
+        case TAB_ABOUT:     about_draw(win);     break;
     }
 }
 
@@ -382,12 +438,16 @@ int main(void) {
 
     gui_listbox_init(&g_pkg_list, 16, CONTENT_Y + 18, WIN_W - 32, 260);
     programs_load();
+    gui_button_init(&g_pkg_scroll_up_btn, 16, CONTENT_Y + 18 + 260 + 6, 60, 26, "Up");
+    gui_button_init(&g_pkg_scroll_down_btn, 82, CONTENT_Y + 18 + 260 + 6, 60, 26, "Down");
 
     gui_checkbox_init(&g_autostart_cb, 16, CONTENT_Y + 6, "Launch GUI automatically");
     g_autostart_cb.checked = autostart_flag_present();
 
     system_sample();
     gui_button_init(&g_sys_refresh_btn, 16, CONTENT_Y + 106, 100, 28, "Refresh");
+
+    about_load();
 
     redraw(win);
 
@@ -404,6 +464,7 @@ int main(void) {
                         case TAB_PROGRAMS:  changed = programs_click(win, ev.x, ev.y);  break;
                         case TAB_AUTOSTART: changed = autostart_click(win, ev.x, ev.y); break;
                         case TAB_SYSTEM:    changed = system_click(win, ev.x, ev.y);    break;
+                        case TAB_ABOUT:     changed = about_click(win, ev.x, ev.y);     break;
                     }
                 }
                 if (changed) redraw(win);

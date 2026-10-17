@@ -23,7 +23,10 @@ import struct
 from pathlib import Path
 
 MAGIC = b"LPG1"
-_HEADER_FMT = "<4s32sHHHBBII"
+# Последние HHH — min_kernel_version (lpg_header_t, tools/lpg_format.h) —
+# добавлено в конец структуры, тот же приём обратной совместимости, что и
+# у lufira_sound_info_t.sample_rate (см. комментарий поля в lpg_format.h).
+_HEADER_FMT = "<4s32sHHHBBIIHHH"
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _DEP_FMT = "<32sHHH"
 _DEP_SIZE = struct.calcsize(_DEP_FMT)
@@ -41,8 +44,8 @@ def _cstr(raw: bytes) -> str:
 
 
 def parse_lpg_header(data: bytes):
-    magic, name_raw, maj, minr, pat, category, _reserved, dep_count, _file_count = \
-        struct.unpack_from(_HEADER_FMT, data, 0)
+    (magic, name_raw, maj, minr, pat, category, _reserved, dep_count, _file_count,
+     kmaj, kminr, kpat) = struct.unpack_from(_HEADER_FMT, data, 0)
     if magic != MAGIC:
         raise ValueError("bad magic")
 
@@ -58,6 +61,7 @@ def parse_lpg_header(data: bytes):
         "version": f"{maj}.{minr}.{pat}",
         "category": CATEGORY_NAMES.get(category, "unknown"),
         "dependencies": deps,
+        "min_kernel_version": f"{kmaj}.{kminr}.{kpat}",
     }
 
 

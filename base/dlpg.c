@@ -231,6 +231,23 @@ static int do_install(const char *lpg_path, int allow_existing) {
         return 1;
     }
 
+    // Совместимость с ядром — ДО зависимостей-пакетов: ставить пакет,
+    // слинкованный под более новый ABI/набор syscall'ов, чем у реально
+    // запущенного ядра, бессмысленно (упадёт при первом же недостающем
+    // syscall'е, а не чисто откажется здесь). lpg_version_gte() — та же
+    // проверка, что и ниже для межпакетных depends.
+    struct lufira_os_version kver;
+    if (sys_os_version(&kver) == 0) {
+        lpg_version_t running = { kver.major, kver.minor, kver.patch };
+        if (!lpg_version_gte(running, hdr.min_kernel_version)) {
+            printf("dlpg: %s needs kernel >= %u.%u.%u (running %u.%u.%u)\n", lpg_path,
+                   hdr.min_kernel_version.major, hdr.min_kernel_version.minor, hdr.min_kernel_version.patch,
+                   kver.major, kver.minor, kver.patch);
+            free(buf);
+            return 1;
+        }
+    }
+
     installed_entry_t installed[MAX_INSTALLED];
     int installed_count = load_installed(installed);
 

@@ -3,63 +3,14 @@
 // lufira-packages/shell/shell.c: "Network/sound всё ещё без syscall'а —
 // не портированы") в userspace, поверх нового SYS_PING (один Echo Request +
 // ожидание за вызов — цикл по seq/печать остаются здесь, как и раньше
-// делал kernel-native command_ping()).
-//
-// IP-парсер/форматтер — свои: это ровно то же, что ip_str_to_addr()/
-// ip_addr_to_str() в kernel/net/net.c (октеты в том же порядке, старший
-// первый), но там не syscall — повторять незачем, кроме как скопировать:
-// libc этой ОС сетевых адресов не знает вовсе.
+// делал kernel-native command_ping()). IP-парсер/форматтер — common/ip_addr.h
+// (общий и с ifconfig.c/wget.c).
 //
 // Сборка — как у cpuload.c/free.c.
 
 #include <stdio.h>
 #include <lufira/syscall.h>
-
-static int parse_ip(const char *s, unsigned int *out_ip) {
-    unsigned int octets[4];
-    const char *p = s;
-
-    for (int i = 0; i < 4; i++) {
-        if (*p < '0' || *p > '9') return -1;
-
-        unsigned int val = 0;
-        int digits = 0;
-        while (*p >= '0' && *p <= '9') {
-            val = val * 10 + (unsigned int)(*p - '0');
-            p++;
-            digits++;
-            if (digits > 3 || val > 255) return -1;
-        }
-        octets[i] = val;
-
-        if (i < 3) {
-            if (*p != '.') return -1;
-            p++;
-        }
-    }
-    if (*p != '\0') return -1;
-
-    *out_ip = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
-    return 0;
-}
-
-static void ip_to_str(unsigned int ip, char *out) {
-    unsigned char octets[4] = {
-        (unsigned char)(ip >> 24), (unsigned char)(ip >> 16),
-        (unsigned char)(ip >> 8), (unsigned char)ip
-    };
-    int pos = 0;
-    for (int i = 0; i < 4; i++) {
-        unsigned int v = octets[i];
-        char tmp[4];
-        int tn = 0;
-        if (v == 0) tmp[tn++] = '0';
-        while (v > 0) { tmp[tn++] = (char)('0' + v % 10); v /= 10; }
-        while (tn > 0) out[pos++] = tmp[--tn];
-        if (i < 3) out[pos++] = '.';
-    }
-    out[pos] = '\0';
-}
+#include "../common/ip_addr.h"
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -68,7 +19,7 @@ int main(int argc, char **argv) {
     }
 
     unsigned int ip;
-    if (parse_ip(argv[1], &ip) != 0) {
+    if (ip_addr_parse(argv[1], &ip) != 0) {
         printf("ping: invalid IP address\n");
         return 1;
     }
@@ -81,7 +32,7 @@ int main(int argc, char **argv) {
     }
 
     char ip_str[16];
-    ip_to_str(ip, ip_str);
+    ip_addr_to_str(ip, ip_str);
     printf("PING %s\n", ip_str);
 
     unsigned int id = (unsigned int)sys_getpid();

@@ -15,11 +15,33 @@ download URL with no change to this script's output shape.
 """
 
 import argparse
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import build_index
+
+_VERSION_H_RE = re.compile(
+    r"#define\s+LUFIRA_VERSION_(MAJOR|MINOR|PATCH)\s+(\d+)"
+)
+
+
+def read_kernel_version(lufira_repo: Path) -> str:
+    """Parses kernel/version.h (LufiraOS repo) with a plain regex — no need
+    to compile anything just to learn the three numbers. This is the ONE
+    place lufira-packages' build reads kernel compatibility from; every
+    .lpg manifest below writes exactly this string as its "kernel_version="
+    line (lpg_pack.c refuses to pack without it) — see the field's own
+    comment in LufiraOS/tools/lpg_format.h for why it's a build-time fact
+    stamped by this script, not a per-package choice."""
+    text = (lufira_repo / "kernel" / "version.h").read_text()
+    parts = dict(_VERSION_H_RE.findall(text))
+    missing = [k for k in ("MAJOR", "MINOR", "PATCH") if k not in parts]
+    if missing:
+        raise RuntimeError(f"kernel/version.h: missing LUFIRA_VERSION_{missing[0]}")
+    return f"{parts['MAJOR']}.{parts['MINOR']}.{parts['PATCH']}"
+
 
 # name -> (version, category, extra include dirs relative to --lufira-repo)
 PACKAGES = {
@@ -39,6 +61,8 @@ PACKAGES = {
     "mixer": ("1.0.0", "user", []),
     "music": ("1.0.0", "user", []),
     "ping": ("1.0.0", "user", []),
+    "ifconfig": ("1.0.0", "user", []),
+    "wget": ("1.0.0", "user", []),
     # v0.7 plan, stage 5, continued ("as many commands out of the kernel
     # as possible") — ported from the dead kernel-native
     # kernel/shell/commands/*.c in LufiraOS.
@@ -186,7 +210,7 @@ def compile_lpg_pack(lufira_repo: Path, out_dir: Path) -> Path:
 
 def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: Path,
                    lpg_pack_bin: Path, name: str, version: str, category: str,
-                   extra_includes: list) -> Path:
+                   extra_includes: list, kernel_version: str) -> Path:
     src = repo_root / category / f"{name}.c"
     flags = CC_FLAGS + [f"-I{lufira_repo / 'libc' / 'include'}"]
     for inc in extra_includes:
@@ -213,6 +237,7 @@ def build_package(repo_root: Path, lufira_repo: Path, out_dir: Path, crt0_obj: P
         f"version={version}\n"
         f"category={category}\n"
         "depends=\n"
+        f"kernel_version={kernel_version}\n"
         "[files]\n"
         f"{elf} /bin/{name}.elf 755\n"
     )
@@ -281,7 +306,7 @@ DOOM_PACKAGE_CATEGORY = "games"
 
 
 def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
-                        crt0_obj: Path, lpg_pack_bin: Path) -> Path:
+                        crt0_obj: Path, lpg_pack_bin: Path, kernel_version: str) -> Path:
     doom_dir = repo_root / "games" / "doom"
     src_dir = doom_dir / "src"
     compat_dir = doom_dir / "compat"
@@ -339,6 +364,7 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
         f"version={DOOM_PACKAGE_VERSION}\n"
         f"category={DOOM_PACKAGE_CATEGORY}\n"
         "depends=\n"
+        f"kernel_version={kernel_version}\n"
         "[files]\n"
         f"{elf} /bin/doom.elf 755\n"
         f"{wad_path} /usr/share/doom1.wad 644\n"
@@ -376,10 +402,14 @@ def main() -> None:
     print("=== Compiling lpg_pack ===")
     lpg_pack_bin = compile_lpg_pack(args.lufira_repo, out_dir)
 
+    kernel_version = read_kernel_version(args.lufira_repo)
+    print(f"=== Target kernel version: {kernel_version} (kernel/version.h) ===")
+
     print(f"=== Building {len(PACKAGES)} package(s) ===")
     for name, (version, category, extra_includes) in sorted(PACKAGES.items()):
         lpg_path = build_package(repo_root, args.lufira_repo, out_dir, crt0_obj,
-                                  lpg_pack_bin, name, version, category, extra_includes)
+                                  lpg_pack_bin, name, version, category, extra_includes,
+                                  kernel_version)
         print(f"  built {lpg_path}")
 
     print("=== Building shell.elf (direct-stage, not a package) ===")
@@ -387,7 +417,8 @@ def main() -> None:
     print(f"  built {shell_elf}")
 
     print("=== Building doom.lpg (doomgeneric port) ===")
-    doom_lpg = build_doom_package(repo_root, args.lufira_repo, out_dir, crt0_obj, lpg_pack_bin)
+    doom_lpg = build_doom_package(repo_root, args.lufira_repo, out_dir, crt0_obj, lpg_pack_bin,
+                                   kernel_version)
     print(f"  built {doom_lpg}")
 
     print("=== Regenerating index.json + release/ ===")
