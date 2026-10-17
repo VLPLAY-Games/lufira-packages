@@ -185,6 +185,44 @@ static uint32_t *g_draw_target = NULL; // куда сейчас пишут fb_*(
 static uint8_t *g_font = NULL;     // байты глифов (SYS_FB_FONT), 8 байт/глиф
 static int g_font_glyphs = 0;      // сколько глифов реально получили (char = 32 + индекс)
 
+// g_content_dirty сигналит, ЧТО перерисовать, но не ГДЕ — present_frame()
+// гнал полный sys_fb_present() (дорогое MMIO-копирование всего кадра) даже
+// на локальное изменение вроде нажатой кнопки в калькуляторе. g_dirty_full —
+// geometry/z-order/фокус (сдвигает/перекрывает произвольные области, нужен
+// честный полный кадр); g_dirty_rect_valid + границы — заливка/текст одного
+// окна, презентуем только объединение этого прямоугольника с bbox курсора.
+static int g_dirty_full = 1;
+static int g_dirty_rect_valid = 0;
+static int g_dirty_x0 = 0, g_dirty_y0 = 0, g_dirty_x1 = 0, g_dirty_y1 = 0;
+
+static void mark_dirty_full(void) {
+    g_content_dirty = 1;
+    g_dirty_full = 1;
+}
+
+// Копится через несколько вызовов подряд (один redraw() клиента — обычно
+// несколько draw-RPC, см. COALESCE_WAIT_MS ниже) — каждый новый прямоугольник
+// расширяет объединение, а не заменяет его.
+static void mark_dirty_rect(int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > (int)g_screen_w) x1 = (int)g_screen_w;
+    if (y1 > (int)g_screen_h) y1 = (int)g_screen_h;
+    if (x0 >= x1 || y0 >= y1) return;
+    if (!g_dirty_rect_valid) {
+        g_dirty_x0 = x0; g_dirty_y0 = y0; g_dirty_x1 = x1; g_dirty_y1 = y1;
+        g_dirty_rect_valid = 1;
+    } else {
+        if (x0 < g_dirty_x0) g_dirty_x0 = x0;
+        if (y0 < g_dirty_y0) g_dirty_y0 = y0;
+        if (x1 > g_dirty_x1) g_dirty_x1 = x1;
+        if (y1 > g_dirty_y1) g_dirty_y1 = y1;
+    }
+    g_content_dirty = 1;
+}
+
 typedef struct {
     char title[WM_TITLE_MAX];
     int x, y, w, h;
@@ -485,10 +523,15 @@ static void launch_fullscreen_app(const char *path) {
     long er = sys_wm_register();
     dbg_log_num("launch_fullscreen_app: re-register after game exit =", er);
 
+    // Игра затёрла весь framebuffer своим содержимым — частичный rect тут
+    // бессмысленен, нужен честный полный кадр.
+    mark_dirty_full();
     composite_scene();
     present_frame(1);
     g_content_dirty = 0;
     g_cursor_moved = 0;
+    g_dirty_full = 0;
+    g_dirty_rect_valid = 0;
 }
 
 static int launcher_rect(int i, int *x, int *y) {
@@ -687,7 +730,7 @@ static void raise_to_top(int idx) {
 static void set_focus(int idx) {
     if (g_focused == idx) return;
     g_focused = idx;
-    g_content_dirty = 1;
+    mark_dirty_full();
 }
 
 static void queue_push(wm_window_t *w, int type, int x, int y, int key_or_button) {
@@ -725,7 +768,7 @@ static void toggle_maximize(wm_window_t *w) {
     }
     queue_push(w, LUFIRA_GUI_EVENT_RESIZE, w->w, w->h, 0);
     update_saved_pos(w->title, w->x, w->y, w->w, w->h);
-    g_content_dirty = 1;
+    mark_dirty_full();
 }
 
 // Сворачивание не трогает геометрию — окно просто не рисуется/не
@@ -738,7 +781,7 @@ static void minimize_window(int idx) {
     if (g_focused == idx) g_focused = -1;
     if (g_dragging == idx) g_dragging = -1;
     if (g_resizing == idx) g_resizing = -1;
-    g_content_dirty = 1;
+    mark_dirty_full();
 }
 
 static void handle_mouse_transition(int mx, int my, int buttons) {
@@ -770,7 +813,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
                 }
             }
             g_start_menu_open = 0;
-            g_content_dirty = 1;
+            mark_dirty_full();
             if (handled) return;
         }
     }
@@ -783,7 +826,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         start_button_rect(&sx, &sy, &sw, &sh);
         if (mx >= sx && mx < sx + sw && my >= sy && my < sy + sh) {
             g_start_menu_open = !g_start_menu_open;
-            g_content_dirty = 1;
+            mark_dirty_full();
             return;
         }
         int btn_idx = (mx - START_BTN_W) / TASKBAR_BTN_W;
@@ -802,7 +845,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
                 raise_to_top(idx);
                 set_focus(idx);
             }
-            g_content_dirty = 1;
+            mark_dirty_full();
         }
         return;
     }
@@ -813,7 +856,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
             wm_window_t *w = &g_windows[idx];
             raise_to_top(idx);
             set_focus(idx);
-            g_content_dirty = 1;
+            mark_dirty_full();
 
             int min_x, max_x, close_x, btn_y, btn_size;
             titlebar_button_rects(w, &min_x, &max_x, &close_x, &btn_y, &btn_size);
@@ -891,7 +934,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         if (ny + outer_h(w) > max_y) ny = max_y - outer_h(w);
         if (nx != w->x || ny != w->y) {
             w->x = nx; w->y = ny;
-            g_content_dirty = 1;
+            mark_dirty_full();
         }
     }
 
@@ -915,7 +958,7 @@ static void handle_mouse_transition(int mx, int my, int buttons) {
         if (new_w != w->w || new_h != w->h) {
             resize_window_buffer(w, new_w, new_h);
             queue_push(w, LUFIRA_GUI_EVENT_RESIZE, w->w, w->h, 0);
-            g_content_dirty = 1;
+            mark_dirty_full();
         }
     }
 }
@@ -1149,6 +1192,29 @@ static void present_frame(int full) {
         }
         // Скачок слишком большой (или вообще не было прошлой позиции) —
         // падаем обратно на полный путь ниже.
+    } else if (!g_dirty_full && g_dirty_rect_valid) {
+        // Контент изменился только в g_dirty_x0..y1 (см. mark_dirty_rect()) —
+        // composite_scene() уже перерисовала этот кусок g_fb, остаётся
+        // скопировать в g_present_fb и презентовать только объединение этой
+        // области с bbox курсора, а не весь экран.
+        int ox0, oy0, ox1, oy1, nx0, ny0, nx1, ny1;
+        cursor_bbox(g_last_cursor_x, g_last_cursor_y, &ox0, &oy0, &ox1, &oy1);
+        cursor_bbox(g_mouse_x, g_mouse_y, &nx0, &ny0, &nx1, &ny1);
+        int ux0 = g_dirty_x0 < ox0 ? g_dirty_x0 : ox0; if (nx0 < ux0) ux0 = nx0;
+        int uy0 = g_dirty_y0 < oy0 ? g_dirty_y0 : oy0; if (ny0 < uy0) uy0 = ny0;
+        int ux1 = g_dirty_x1 > ox1 ? g_dirty_x1 : ox1; if (nx1 > ux1) ux1 = nx1;
+        int uy1 = g_dirty_y1 > oy1 ? g_dirty_y1 : oy1; if (ny1 > uy1) uy1 = ny1;
+        if (ux0 < ux1 && uy0 < uy1) {
+            present_copy_rect(ux0, uy0, ux1, uy1);
+            g_draw_target = g_present_fb;
+            draw_cursor(g_mouse_x, g_mouse_y);
+            sys_fb_present_rect(g_present_fb, g_screen_w, g_screen_h,
+                                 ux0, uy0, (unsigned)(ux1 - ux0), (unsigned)(uy1 - uy0));
+            g_last_cursor_x = g_mouse_x;
+            g_last_cursor_y = g_mouse_y;
+            g_draw_target = g_fb;
+            return;
+        }
     }
 
     memcpy(g_present_fb, g_fb, (size_t)g_screen_w * g_screen_h * sizeof(uint32_t));
@@ -1205,7 +1271,7 @@ static void do_win_create(uint32_t owner_pid, const struct wm_request *req, stru
 
     g_order[g_window_count++] = idx;
     set_focus(idx);
-    g_content_dirty = 1;
+    mark_dirty_full();
     rep->result = idx;
     dbg_log_num("do_win_create: OK idx=", (long)idx);
 }
@@ -1236,7 +1302,7 @@ static void destroy_window_by_index(int window_id) {
     // Рабочий стол рисуется постоянно (см. main()) — закрытие последнего
     // окна просто обнажает пустой стол; возврат к консоли делает кернел
     // (process_exit(), process.c) только когда завершается сам WM.
-    g_content_dirty = 1;
+    mark_dirty_full();
 }
 
 static void do_win_destroy(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
@@ -1270,7 +1336,7 @@ static void do_win_fill(uint32_t owner_pid, const struct wm_request *req, struct
     // так что bg_color — лучшее доступное приближение "фона окна" для
     // будущего ресайза (resize_window_buffer() выше).
     w->bg_color = c;
-    g_content_dirty = 1;
+    mark_dirty_rect(w->x + WM_BORDER, w->y + WM_TITLEBAR_HEIGHT, w->w, w->h);
     rep->result = 0;
 }
 
@@ -1289,7 +1355,7 @@ static void do_win_draw_rect(uint32_t owner_pid, const struct wm_request *req, s
         for (int px = x0; px < x1; px++)
             w->pixels[py * w->w + px] = c;
 
-    g_content_dirty = 1;
+    mark_dirty_rect(w->x + WM_BORDER + x0, w->y + WM_TITLEBAR_HEIGHT + y0, x1 - x0, y1 - y0);
     rep->result = 0;
 }
 
@@ -1299,10 +1365,11 @@ static void do_win_draw_text(uint32_t owner_pid, const struct wm_request *req, s
     uint32_t c = wm_convert_color((uint32_t)req->a[3]);
     int x = req->a[1], y = req->a[2];
 
-    for (int i = 0; req->str[i]; i++)
+    int len = (int)strlen(req->str);
+    for (int i = 0; i < len; i++)
         win_draw_glyph(w->pixels, w->w, w->h, x + i * WM_CHAR_W, y, (unsigned char)req->str[i], c);
 
-    g_content_dirty = 1;
+    mark_dirty_rect(w->x + WM_BORDER + x, w->y + WM_TITLEBAR_HEIGHT + y, len * WM_CHAR_W, WM_CHAR_H);
     rep->result = 0;
 }
 
@@ -1310,7 +1377,7 @@ static void do_win_move(uint32_t owner_pid, const struct wm_request *req, struct
     wm_window_t *w = get_owned(owner_pid, req->a[0]);
     if (!w) { rep->result = -1; return; }
     w->x = req->a[1]; w->y = req->a[2];
-    g_content_dirty = 1;
+    mark_dirty_full();
     rep->result = 0;
 }
 
@@ -1428,6 +1495,8 @@ int main(void) {
     present_frame(1);
     g_content_dirty = 0;
     g_cursor_moved = 0;
+    g_dirty_full = 0;
+    g_dirty_rect_valid = 0;
 
     for (;;) {
         struct lufira_ipc_msg msg;
@@ -1448,6 +1517,8 @@ int main(void) {
             composite_scene();
             g_content_dirty = 0;
             present_frame(1);
+            g_dirty_full = 0;
+            g_dirty_rect_valid = 0;
         } else if (g_cursor_moved) {
             present_frame(0);
         }
