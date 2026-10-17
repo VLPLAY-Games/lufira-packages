@@ -35,7 +35,12 @@
 
 #define INSTALLED_DB   "/etc/packages/installed"
 #define PACKAGES_DIR   "/etc/packages"
-#define MAX_INSTALLED  32
+// Пользователь: "надо увеличить с 32 пакетов до 64 или больше" — 32 стало
+// тесно (уже 49 пакетов в самом репозитории, см. index.json). installed_entry_t
+// — около 40 байт, стек-массивы [MAX_INSTALLED] в do_install/do_list/
+// do_remove/do_upgrade ниже остаются в единицах КБ даже на 64 (~2.5КБ),
+// с большим запасом под пользовательский стек.
+#define MAX_INSTALLED  64
 
 // Репозиторий пакетов — тот же, что у lufira-packages (см. README).
 // "refs/heads/main", не просто "main" — явнее видно, что это ветка.
@@ -277,6 +282,21 @@ static int do_install(const char *lpg_path, int allow_existing) {
         }
     }
 
+    // НАЙДЕННЫЙ БАГ (пользователь: больше 32 пакетов ставится и работает,
+    // но не попадает в /etc/packages/installed — и поэтому не удаляется)
+    // — эта проверка раньше стояла в самом конце, ПОСЛЕ цикла распаковки
+    // файлов ниже: при 33-м новом пакете файлы уже успевали оказаться на
+    // диске, и только тогда do_install() отказывал и выходил — ровно та
+    // "частично установленная" ситуация, которую дедупликация зависимостей
+    // выше специально проверяет ДО распаковки. Тот же принцип применяем и
+    // здесь: при нехватке места под НОВУЮ запись (existing_idx < 0 — это
+    // не update уже стоящего пакета) отказываем ДО единой записи на диск.
+    if (existing_idx < 0 && installed_count >= MAX_INSTALLED) {
+        printf("dlpg: installed-package table full (max %d)\n", MAX_INSTALLED);
+        free(buf);
+        return 1;
+    }
+
     lpg_file_entry_t *files = (lpg_file_entry_t *)(buf + sizeof(lpg_header_t) + hdr.dep_count * sizeof(lpg_dependency_t));
 
     // Распаковка + сборка receipt-файла (список установленных путей) для remove().
@@ -316,16 +336,14 @@ static int do_install(const char *lpg_path, int allow_existing) {
     if (existing_idx >= 0) {
         installed[existing_idx].version = hdr.version;
         installed[existing_idx].category = hdr.category;
-    } else if (installed_count < MAX_INSTALLED) {
+    } else {
+        // installed_count < MAX_INSTALLED уже гарантирован проверкой выше
+        // (до распаковки файлов) — здесь просто добавляем запись.
         memset(&installed[installed_count], 0, sizeof(installed[installed_count]));
         strncpy(installed[installed_count].name, hdr.name, LPG_NAME_MAX - 1);
         installed[installed_count].version = hdr.version;
         installed[installed_count].category = hdr.category;
         installed_count++;
-    } else {
-        printf("dlpg: installed-package table full (max %d)\n", MAX_INSTALLED);
-        free(buf);
-        return 1;
     }
     save_installed(installed, installed_count);
 

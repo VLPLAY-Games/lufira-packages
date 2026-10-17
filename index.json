@@ -87,7 +87,7 @@
       "dependencies": [],
       "min_kernel_version": "0.9.0",
       "size": 23926,
-      "sha256": "17aee411a4e68bf93a8eb0ce131fa24faf06aecd0a29b7e3b89cef1f171a316a",
+      "sha256": "8447ed1f7f5c5adfeea23c75a396accdf76fc62140313b67da5dc1bc43e28c56",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/dlpg.lpg"
     },
     {
