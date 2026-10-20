@@ -382,6 +382,51 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
     return lpg_path
 
 
+# netd — демон сети (v0.9.5: сеть вынесена из ядра в userspace, см. разбор
+# архитектуры в daemons/netd/main.c). Не влезает в build_package() (тот
+# рассчитан РОВНО на один .c на пакет) — отдельная функция, тот же приём,
+# что у build_doom_package() выше, только без FPU-разделения (весь сетевой
+# стек и крипто — целочисленная арифметика) и без второго файла-ассета.
+def build_netd_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
+                        crt0_obj: Path, lpg_pack_bin: Path, kernel_version: str) -> Path:
+    netd_dir = repo_root / "daemons" / "netd"
+
+    flags = CC_FLAGS + [f"-I{netd_dir}", f"-I{netd_dir / 'crypto'}",
+                        f"-I{lufira_repo / 'libc' / 'include'}"]
+
+    obj_dir = out_dir / "netd_obj"
+    obj_dir.mkdir(parents=True, exist_ok=True)
+
+    sources = sorted(netd_dir.glob("*.c")) + sorted((netd_dir / "crypto").glob("*.c"))
+    objs = []
+    for src in sources:
+        obj = obj_dir / (src.stem + ".o")
+        _run(["gcc", *flags, "-c", str(src), "-o", str(obj)])
+        objs.append(obj)
+
+    elf = out_dir / "netd.elf"
+    _run(["ld", "-m", "elf_x86_64", "-nostdlib", "-no-pie",
+          "-dynamic-linker", "/lib/ld.so",
+          "-o", str(elf), str(crt0_obj), *[str(o) for o in objs],
+          "-L", str(out_dir), "-lc"])
+
+    manifest = (
+        "name=netd\n"
+        "version=1.0.0\n"
+        "category=daemons\n"
+        "depends=\n"
+        f"kernel_version={kernel_version}\n"
+        "[files]\n"
+        f"{elf} /bin/netd.elf 755\n"
+    )
+    manifest_path = out_dir / "netd.manifest"
+    manifest_path.write_text(manifest)
+
+    lpg_path = out_dir / "netd.lpg"
+    _run([str(lpg_pack_bin), str(manifest_path), str(lpg_path)])
+    return lpg_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lufira-repo", type=Path,
@@ -425,6 +470,11 @@ def main() -> None:
     doom_lpg = build_doom_package(repo_root, args.lufira_repo, out_dir, crt0_obj, lpg_pack_bin,
                                    kernel_version)
     print(f"  built {doom_lpg}")
+
+    print("=== Building netd.lpg (network daemon) ===")
+    netd_lpg = build_netd_package(repo_root, args.lufira_repo, out_dir, crt0_obj, lpg_pack_bin,
+                                   kernel_version)
+    print(f"  built {netd_lpg}")
 
     print("=== Regenerating index.json + release/ ===")
     release_dir = repo_root / "release"

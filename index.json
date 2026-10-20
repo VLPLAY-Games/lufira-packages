@@ -411,6 +411,16 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/music.lpg"
     },
     {
+      "name": "netd",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "min_kernel_version": "0.9.0",
+      "size": 91942,
+      "sha256": "186664a8232c5e829962506ee6cc6d2abfd685c7364500fc07cf1dc5b0c60448",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/netd.lpg"
+    },
+    {
       "name": "notepad",
       "version": "1.0.0",
       "category": "user",
