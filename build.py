@@ -387,6 +387,16 @@ def build_doom_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
 # рассчитан РОВНО на один .c на пакет) — отдельная функция, тот же приём,
 # что у build_doom_package() выше, только без FPU-разделения (весь сетевой
 # стек и крипто — целочисленная арифметика) и без второго файла-ассета.
+#
+# netd не в PACKAGES выше (свой build_netd_package(), не общий
+# build_package()) — но LufiraOS-Builder's gui.py._load_package_catalog_local()
+# всё равно должно видеть его версию/категорию для чекбокса (тот же приём,
+# что уже есть для doom), поэтому они — именованные константы, а не
+# литералы прямо в манифесте ниже.
+NETD_PACKAGE_VERSION = "1.0.0"
+NETD_PACKAGE_CATEGORY = "daemons"
+
+
 def build_netd_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
                         crt0_obj: Path, lpg_pack_bin: Path, kernel_version: str) -> Path:
     netd_dir = repo_root / "daemons" / "netd"
@@ -412,8 +422,8 @@ def build_netd_package(repo_root: Path, lufira_repo: Path, out_dir: Path,
 
     manifest = (
         "name=netd\n"
-        "version=1.0.0\n"
-        "category=daemons\n"
+        f"version={NETD_PACKAGE_VERSION}\n"
+        f"category={NETD_PACKAGE_CATEGORY}\n"
         "depends=\n"
         f"kernel_version={kernel_version}\n"
         "[files]\n"

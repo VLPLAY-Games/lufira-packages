@@ -417,7 +417,7 @@
       "dependencies": [],
       "min_kernel_version": "0.9.0",
       "size": 91942,
-      "sha256": "186664a8232c5e829962506ee6cc6d2abfd685c7364500fc07cf1dc5b0c60448",
+      "sha256": "b27859f79cf743929f54cdd3aab3c0568dedfbe3b7b03e96185096965b747804",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/netd.lpg"
     },
     {

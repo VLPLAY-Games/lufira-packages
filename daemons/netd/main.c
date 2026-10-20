@@ -24,20 +24,28 @@
 #include "http_client.h"
 
 static void handle_fetch(const struct netd_request *req, struct netd_reply *reply) {
-    // req->str — уже гарантированно NUL-терминирована ядром (sys_net_fetch(),
-    // syscall.c) перед отправкой запроса, можно читать как обычную C-строку.
-    const char *url = req->str;
+    // URL — отдельная shm-область (одна страница, NUL-терминирована ядром,
+    // sys_net_fetch()/syscall.c) — не тесное поле в самом запросе: реальные
+    // URL пакетного индекса длиннее любого разумного усечения mailbox'а.
+    long url_virt = sys_shm_attach((int32_t)req->url_shm_id);
+    if (url_virt < 0) { reply->result = HTTP_FETCH_ENODEV; return; }
+    const char *url = (const char *)url_virt;
 
     void *buf = NULL;
     if (req->cap > 0) {
-        long virt = sys_shm_attach((int32_t)req->shm_id);
-        if (virt < 0) { reply->result = HTTP_FETCH_ENODEV; return; }
+        long virt = sys_shm_attach((int32_t)req->body_shm_id);
+        if (virt < 0) {
+            sys_munmap((void *)url_virt, 4096);
+            reply->result = HTTP_FETCH_ENODEV;
+            return;
+        }
         buf = (void *)virt;
     }
 
     int status = 0;
     int n = http_fetch(url, buf, req->cap, &status);
 
+    sys_munmap((void *)url_virt, 4096);
     if (buf) {
         uint64_t aligned_cap = ((uint64_t)req->cap + 4095u) & ~(uint64_t)4095u;
         sys_munmap(buf, aligned_cap);
