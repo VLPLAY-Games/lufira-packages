@@ -486,8 +486,8 @@
       "category": "user",
       "dependencies": [],
       "min_kernel_version": "0.9.0",
-      "size": 35262,
-      "sha256": "7c0030147cf1c90386499ac6280d530be43a67ddda40536e746a79ce20892bdb",
+      "size": 39670,
+      "sha256": "281d2d6151cebcc3511cfda40464ea52b7fe754cb080581e5848a377766ceb45",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/wm.lpg"
     }
   ],
