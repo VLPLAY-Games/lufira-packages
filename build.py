@@ -119,6 +119,11 @@ PACKAGES = {
     # см. LufiraOS/kernel/system/syscall/syscall.h) и уже существующих
     # SYS_MEMINFO/SYS_STATFS/SYS_CPULOAD/SYS_PSLIST.
     "settings": ("1.0.0", "apps", []),
+    # v0.9.5: звук вынесен из ядра в userspace-демон — см. разбор архитектуры
+    # в daemons/soundd.c. Запускается самим кернелом при загрузке
+    # (spawn_daemon_process(), kernel.c), не пользователем — но это обычный
+    # .lpg-пакет, как и всё остальное здесь, не что-то отдельное от dlpg.
+    "soundd": ("1.0.0", "daemons", []),
 }
 
 # v0.8-мост, пункт 8 (динамическая линковка): crt0.S остаётся статически

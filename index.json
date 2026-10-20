@@ -441,6 +441,16 @@
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/settings.lpg"
     },
     {
+      "name": "soundd",
+      "version": "1.0.0",
+      "category": "user",
+      "dependencies": [],
+      "min_kernel_version": "0.9.0",
+      "size": 26990,
+      "sha256": "a2aa2b7e067c48430ab8df0aee6280841745130804b05a20b28ccad0694bc02b",
+      "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/soundd.lpg"
+    },
+    {
       "name": "sysinfo",
       "version": "1.0.0",
       "category": "user",
