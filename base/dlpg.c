@@ -126,6 +126,34 @@ static char *read_whole_file(const char *path, long *out_len) {
     return buf;
 }
 
+// Создаёт недостающие родительские каталоги для path ("mkdir -p" для всех
+// компонентов, кроме последнего) — sys_mkdir() создаёт только ОДИН
+// уровень и требует, чтобы родитель уже существовал (SYS_MKDIR в
+// syscall.c), а write_whole_file() ниже — просто O_CREAT, тоже без
+// авторекурсии. На хосте tools/mkfs_lufirafs.c's split_path() сам делает
+// mkdir -p (ensure_dir_path()), поэтому пакет, установленный ПРЯМО ПРИ
+// СБОРКЕ образа, создаёт нужный каталог незаметно — но при установке ЭТИМ,
+// кодом (по сети, через dlpg install) каталог никто заранее не создавал,
+// если ни один из уже стоящих пакетов туда ничего не клал. Так ловился
+// баг "/usr/share/doom1.wad" — /usr/share нет в DEFAULT_DIRS, его трогает
+// только doom, и на образе, собранном без doom изначально, этого каталога
+// просто не существовало.
+static void ensure_parent_dirs(const char *path) {
+    char buf[LPG_PATH_MAX];
+    int len = (int)strlen(path);
+    if (len >= (int)sizeof(buf)) len = (int)sizeof(buf) - 1;
+    memcpy(buf, path, (size_t)len);
+    buf[len] = '\0';
+
+    for (int i = 1; i < len; i++) {
+        if (buf[i] == '/') {
+            buf[i] = '\0';
+            sys_mkdir(buf, 0755); // "уже существует" — ожидаемо, игнорируем
+            buf[i] = '/';
+        }
+    }
+}
+
 static int write_whole_file(const char *path, const void *data, long len) {
     long fd = sys_open(path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd < 0) return -1;
@@ -312,6 +340,7 @@ static int do_install(const char *lpg_path, int allow_existing) {
 
     for (uint32_t i = 0; i < hdr.file_count; i++) {
         const uint8_t *data = buf + files[i].offset;
+        ensure_parent_dirs(files[i].path);
         if (write_whole_file(files[i].path, data, (long)files[i].size) != 0) {
             printf("dlpg: failed to write %s\n", files[i].path);
             free(buf);
