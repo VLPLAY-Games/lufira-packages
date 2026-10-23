@@ -5,9 +5,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14206,
-      "sha256": "d605e2f07b56175b082df0f660e0915ebc8280526c887dc8ecba9102ee07f322",
+      "sha256": "cc80bb92f9d224753513fc28caa803016f8e5b594f437342611b37c94c4ea61c",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/bg.lpg"
     },
     {
@@ -15,9 +15,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14414,
-      "sha256": "4ffd242a508683a8510ec56304898a2f835a1e33da5cd0a0b562eaec773f07bc",
+      "sha256": "32a0f597099f77a431cdb512f51a259c35f05b55c3de0cf9e162a6a2d40645a3",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/cat.lpg"
     },
     {
@@ -25,9 +25,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14134,
-      "sha256": "cde3b2639c5e272c7e8ce984a8dbc3b10350ddfa32ac1e787c20589bf9f2405e",
+      "sha256": "aecf527102392bcdee103ff9331aca2ebd9358b5270d186b9d99d3829dbaaf68",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/chmod.lpg"
     },
     {
@@ -35,9 +35,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14174,
-      "sha256": "c5aaefce785b5a0a4c8c942e25232f2cc7cf42f3076e5127802d2cf7a5f6e83d",
+      "sha256": "4ea6daf0765f15667ff08cce9108526862f9b209835d772fff37ebc04560a350",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/chown.lpg"
     },
     {
@@ -45,9 +45,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14286,
-      "sha256": "53c4c63f9ad317a88a15778d1fa8a8899442a23a5381558b8a0f28dafb87b821",
+      "sha256": "b0e7ceb9c5edabf0371184858f3f7c9904639b2fce0ebb9fc325d0d26e6d5a15",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/color.lpg"
     },
     {
@@ -55,9 +55,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14526,
-      "sha256": "fd87d71581fdbfefae11009d71d189ca2dfbbd0e8b0cb24d59d878178fce83c9",
+      "sha256": "f0e08bd78e357ab68ae7e55256d1b4f37d8888a73ef3ed0a4e86ba055a5e4cb3",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/cp.lpg"
     },
     {
@@ -65,9 +65,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14174,
-      "sha256": "b554df1480cb46e6925ec3aa61b043fa1b1ba8a2f0495fc86a594d7c8826aea5",
+      "sha256": "855da083f3dd1846729c4fc2d1c36c3e92c795261c55a84a6e305f5f8332a907",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/date.lpg"
     },
     {
@@ -75,9 +75,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14182,
-      "sha256": "07c324922f17353195fd7d69946726bc0fd58eefe62f8935232eb49b973c9d35",
+      "sha256": "dccdada41f0c2fce913e61cd34ea7ee12d55b1166ca43cb3e562f136780b1f5c",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/devmode.lpg"
     },
     {
@@ -85,9 +85,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 24198,
-      "sha256": "604bd4967ff727d34bb264ca8325807e8201e0bb88b711a72bbc409aca3d6b37",
+      "sha256": "9c04552c2ed461f35c65ff74d1c52ad9c5a29a32473f01aee1bb056a289eee9c",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/dlpg.lpg"
     },
     {
@@ -95,9 +95,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14206,
-      "sha256": "8cee06708293de002773f3fea071f6664594e17084ae5eeae854294a75621a1a",
+      "sha256": "8a804979c55ff713e63435c73aa0c9487779b31402facde8fe8159b0e4975d15",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/fg.lpg"
     },
     {
@@ -105,9 +105,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "412671c25a64021d55b3388e67cdf527acba2c48080236c82dbaba873004e3f6",
+      "sha256": "1e95921b7ef8433a70bd30c0f85d3ad42b9d262851b693b3ff1172da0e349130",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/groupadd.lpg"
     },
     {
@@ -115,9 +115,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14206,
-      "sha256": "7220043d646bc4c41880213fd8d27485f975e88188d7a0f786a7279a95ffb11e",
+      "sha256": "0e275af21b708dd60f596052b2eb87803b46b2db77351c2f76e2db2d483da33f",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/kill.lpg"
     },
     {
@@ -125,9 +125,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14462,
-      "sha256": "354888d6049187398d2956cadf721cba0f8fcf3301948cf0ebacb4ff98f13f66",
+      "sha256": "583c37418bcaafdbafd6f3e53fbe85d7b87278244444650d543dcd3092190cf5",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/ls.lpg"
     },
     {
@@ -135,9 +135,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14134,
-      "sha256": "b44732aaed21f94b1d444944b6871b43d6ee365b4483d14b111d361a29182c37",
+      "sha256": "8b4a85f4d76bf101525834c0a74ef9106a0703d8c4042c859b89ddbab8a6d2dc",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mkdir.lpg"
     },
     {
@@ -145,9 +145,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14174,
-      "sha256": "e6bf4a4573c59a05832c8086d28108c304a1a4a6ca626a0d0873542d59f84990",
+      "sha256": "65b0802a0d957429020a31dcf6e6a64fc55aa6ee290aa93ae2ff78ec1293dcb6",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mount.lpg"
     },
     {
@@ -155,9 +155,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14558,
-      "sha256": "9c62045b4c88a25bc20a25ef18bd856ea2c56070ac3d304ac96025a056f58f4f",
+      "sha256": "aec5bdc79b13debf3d477c34e549a012dff4fe6f6299c76c3d9c6cf88d9c4c5d",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mv.lpg"
     },
     {
@@ -165,9 +165,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14182,
-      "sha256": "ce541882333d7e43080d4e6edad3dd088155c4e2a0e23b250b033e452d856790",
+      "sha256": "c6cae7501fe7ef80719a3b14d8b7441b21c12df4e1f6aa99c8daf73cff047878",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/passwd.lpg"
     },
     {
@@ -175,9 +175,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14174,
-      "sha256": "90c71043c2d6e5ff38275af0ba312a9f7f72295277be3b0ed6a27e2eb623e6c2",
+      "sha256": "144d8303c6a25297d4fe6c0b03dddfb27ab8d36608eab638290e02eb1f3066d2",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/ps.lpg"
     },
     {
@@ -185,9 +185,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "1a82a0df93fe41c0ea14718ed4e89903f8b6825af3d19da6a9230ed96a3e825c",
+      "sha256": "5d1dd4ae96b6614559fe08e98d4ccbf5a240fd119a46362fcb011ab215fb1c47",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/reboot.lpg"
     },
     {
@@ -195,9 +195,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14094,
-      "sha256": "8d11b5d580999daeb6f9f73ee462db425d1cd1c08ff8196bfd79bafa74b83e15",
+      "sha256": "8326190a16597f66f871c336f803406162a87cb266fa4dc56fe0431d541e2955",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/reset.lpg"
     },
     {
@@ -205,9 +205,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14534,
-      "sha256": "51a23bfc6465c1ded49a19c69853a5ed8c04869f283ac5b4f47e5b9c963d6abb",
+      "sha256": "819651fe6ce6775291a0478e90eb66314a17b3ac951dcec183586d3314820626",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/rm.lpg"
     },
     {
@@ -215,9 +215,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "482f3c801e7e0a36f4ed47e421c90396e360f09e8b6b93919c4579c56ccc21ec",
+      "sha256": "c02f92f81b1e85e270f3bad72c1607168c73321dfde8c9a5382c3c1c2df6ed07",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/shutdown.lpg"
     },
     {
@@ -225,9 +225,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14246,
-      "sha256": "c0c9a4c9eaaefbf059dd28d73e36fbe3ce52c71d21ccfce92868e93dbc9a0bc1",
+      "sha256": "0c2a6ba3a4ddff51c148ce2ae21152faf34f997496c0c283b9267bbea85d2c1c",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/touch.lpg"
     },
     {
@@ -235,9 +235,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "e4b2615155ff3ea425777f2e5a1c50a97bd82d7555f97e523a320f8e69adf836",
+      "sha256": "62a94bb078af04ef7751887a122fe29dfddd49c4fc408534603fb14f7ad524c3",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/umount.lpg"
     },
     {
@@ -245,9 +245,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14182,
-      "sha256": "06fa0de3aeb1af0c7891e2889c6b3a4cf560bd3ce3c5bd7c3b351fd507c0e96a",
+      "sha256": "07dd1302d7e0b5a11c4699af6908571ee74e908f1222b5684e5d41eacbd615f4",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/usbinfo.lpg"
     },
     {
@@ -255,9 +255,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14214,
-      "sha256": "d275db9d7cdbbd82fe9e7fb57d0a5fd1c1d2d3e444207adef0888e6113a31ad0",
+      "sha256": "f8fcaba5fe930569cd8c5b8e286b90abd91d53f70ae7020d66fb5d27cbcfb088",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/usbread.lpg"
     },
     {
@@ -265,9 +265,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14334,
-      "sha256": "9a83e6ef46c3a708fbcd9f25b883e18c8f18c9db4efe2e7a5467e7cafa8bd41e",
+      "sha256": "c3c502a16c97003c1dc61fcf17e2c73e992a375a774fc9b9a3324a201004835e",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/usbwrite.lpg"
     },
     {
@@ -275,9 +275,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "7c441cf9ba3da5ee36d8926fda4b705f451137f3a1394423175e14525e4730eb",
+      "sha256": "42433b9b4b112594009d63b898a05e34fa9dc8c4e96c759540ae5bd32a10aa7a",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/useradd.lpg"
     },
     {
@@ -285,9 +285,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14398,
-      "sha256": "5341d06c0d4dec6e8ad4ca3c54268290f1f167c0636cbd9b384c7e0a4665009a",
+      "sha256": "56b999ef59d40984d0e1c18c6415aa071bba5c2b20130b32497cd79f95285f9a",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/whoami.lpg"
     },
     {
@@ -295,9 +295,9 @@
       "version": "1.0.0",
       "category": "base",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14278,
-      "sha256": "afbc4b4d7d631796ecc2df5e19fa3c080b710dd59c36d5420ac0b38a413e9b99",
+      "sha256": "87eda6e75e3271b69b2c5c8178ec79d2069e9ec333c4cd560cc39fe5a57f1771",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/write.lpg"
     },
     {
@@ -305,9 +305,9 @@
       "version": "1.0.0",
       "category": "games",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 4777382,
-      "sha256": "21b5fdf410d8b664cb44ccfe0e1e7d9cf9df602749060536759e58d2dcec556c",
+      "sha256": "fac11bcbbebff9b8bd809e8d106b8dab796eb6d8e8b7ad62678864cb78777742",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/doom.lpg"
     },
     {
@@ -315,9 +315,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14310,
-      "sha256": "2f4027538cd44ac2e5c3109f69b71ec62e5bf06be2386ca5219478be60ac4531",
+      "sha256": "efdd09262111cdac2c402a7107dffac5ce9eea208a5baf6e7842de9851e625a0",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/beep.lpg"
     },
     {
@@ -325,9 +325,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14934,
-      "sha256": "da0a7f17b0aeb5c894808e1132b7753198fa69c93561894d34d765a4d276737e",
+      "sha256": "4ea4426a35877c082b5a79d69b094f6379e2aba37d8308c93758a0e3b2165622",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/calc.lpg"
     },
     {
@@ -335,9 +335,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14214,
-      "sha256": "4eed168837f8bf8ad793d5ae43b2600cb3c2a94a59c52064cbce7388f241a0dc",
+      "sha256": "7b81516436b131d0ef9f2876ff14b23c82ddee22e4ac87c9266de7c3605dec09",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/cpuload.lpg"
     },
     {
@@ -345,9 +345,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14134,
-      "sha256": "fe07c37b8ab9328bb44dedc1234142ef0b245676741827a452550facc2da9742",
+      "sha256": "6b1ff6a2715fb010f469a0fcbb9d4f736d77f4d222b2af05e82adb297b58c770",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/df.lpg"
     },
     {
@@ -355,9 +355,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14606,
-      "sha256": "9f35a609966e5ed55063a0663db673de6c5ddfdad5bd8fbcfcd755600f985d0a",
+      "sha256": "3d2af67f222d4ef9eb400731da1bd995696de072693e3ee0bebe6510d0b0d571",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/du.lpg"
     },
     {
@@ -365,9 +365,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 15854,
-      "sha256": "0aa3d7567d66b835b7d6c5f0750056877c16e8b67deebc520c38351c2f732b65",
+      "sha256": "7f6d3a601adffc1e207ca2e4397e514d06fc656622638bd405fd911f4db07039",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/files.lpg"
     },
     {
@@ -375,9 +375,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14142,
-      "sha256": "d7341b7899436c97053e6b115c5f8e6c4996735d3ffb891ec72bd4527e6f16c7",
+      "sha256": "d04f30bec16952350f424094f7ce0e507d6d2859a602663578012eb9913634f9",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/free.lpg"
     },
     {
@@ -385,9 +385,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14366,
-      "sha256": "baba3d6e6095171c635b4946ff4046a3a8510452df21049492fe7948ec0e0f5f",
+      "sha256": "71dcc8b1fc6086fb442b2450125d24c3630cc1e489e88760b0f7da37c753692b",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/ifconfig.lpg"
     },
     {
@@ -395,9 +395,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14190,
-      "sha256": "eb51337946ab56cd86a328d5f29dde5bf236d07199a2fface6c3ae15c8b2d73f",
+      "sha256": "c883f42972790e8c1d807b0e5cc3e05af0a9bb8faeb3bef0dbff04ca59c3f69a",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/mixer.lpg"
     },
     {
@@ -405,9 +405,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14342,
-      "sha256": "450f26ffdf758d9154bffe8fc7cac8e220f02a88bec3b9fa1614cce9b9168eaf",
+      "sha256": "33389d97a8828c5670ba3c453ff2afd834fd217733cd3db9dfb2815908e1f679",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/music.lpg"
     },
     {
@@ -415,9 +415,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 92782,
-      "sha256": "06b226b034204b7653e006179d1a092c59a8479f9379fdb06aaa0603221daeba",
+      "sha256": "e591ce80ee328df871625dbb2f3bf45c3ec7a405ad18190b9a76126c634190bf",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/netd.lpg"
     },
     {
@@ -425,9 +425,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 15190,
-      "sha256": "40ca58952dc47d8da94f24c584045d4a278064e1f9a82b8fcaa657423cc458ac",
+      "sha256": "56a9a08690820440087df9c9f5ac79326695bc6b73784e0ba2e5d35ac060fd52",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/notepad.lpg"
     },
     {
@@ -435,9 +435,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14246,
-      "sha256": "c6f4813fab6bafcebac8972f477add80065beeaf9659e37f6ca7cbcdd9860b05",
+      "sha256": "00691efbd048e34a2e747bda88f8f748e8e15281178f962476d90c51db53e1d0",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/ping.lpg"
     },
     {
@@ -445,9 +445,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 21366,
-      "sha256": "5910d5ff9c012ee21eebb2e45ea1e9141b999d24c218d21620eac0aab832e8ea",
+      "sha256": "24d186c4ad4ee1f756424db07e77bf129371a47bf6ba73c9e30deea5b70c9b63",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/settings.lpg"
     },
     {
@@ -455,9 +455,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 26990,
-      "sha256": "a2aa2b7e067c48430ab8df0aee6280841745130804b05a20b28ccad0694bc02b",
+      "sha256": "95dada1ef36c80cac513e7f7c8e5823b0a1602b1d048dbf3343d1d3001308623",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/soundd.lpg"
     },
     {
@@ -465,9 +465,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14982,
-      "sha256": "b04fcd413ef79df9affa5e2264fc8d9007a152addd435e2fe2fc95a1101ee3eb",
+      "sha256": "0a69aaae3b28998c659e2ba829a0d9c626cd8dcc4fe3889c3d9f8905cdd52467",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/sysinfo.lpg"
     },
     {
@@ -475,9 +475,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 19758,
-      "sha256": "1838ff7d55a82cc6ff87673e68b245ff72b1fc2ae7fdf8a49c0732b3e2fc8683",
+      "sha256": "9fa3256427a1a4325447f1f57a3ad757d65a625a80b84b732c089ab190de9a53",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/terminal.lpg"
     },
     {
@@ -485,9 +485,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14526,
-      "sha256": "2d740138cb98940853f74b6b65fdfb52642712c45bf9049769fc5ebfb79ddc3d",
+      "sha256": "46ff96f7ba762c85dd71c2ec93e3a1c8625c748e7b6d76e4356b33ed935c0828",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/text_demo.lpg"
     },
     {
@@ -495,9 +495,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 14438,
-      "sha256": "2187668625ed1ea500d142e0061d235f9f49659266d4091cf515f04acb14a025",
+      "sha256": "eb2ff3967b352e62525b1431539d8d39d43b2541519856383eb76f58f77ca366",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/wget.lpg"
     },
     {
@@ -505,9 +505,9 @@
       "version": "1.0.0",
       "category": "user",
       "dependencies": [],
-      "min_kernel_version": "0.9.0",
+      "min_kernel_version": "0.9.5",
       "size": 43806,
-      "sha256": "1fc839afd465daa92b877dc2549d679e9ff1921c4ebf8e2f72448935d6cf8795",
+      "sha256": "37fe1aeaec2c9ed1c4826d3f649c402f82b181bde40c18b12933b0bd2a4f4a81",
       "lpg": "https://raw.githubusercontent.com/VLPLAY-Games/lufira-packages/refs/heads/main/release/wm.lpg"
     }
   ],
