@@ -1373,6 +1373,25 @@ static void do_win_draw_text(uint32_t owner_pid, const struct wm_request *req, s
     rep->result = 0;
 }
 
+// Partial-dirty hint (0.9.5, WM_OP_WIN_MARK_DIRTY) — не рисует ничего в
+// w->pixels, только расширяет накопленную dirty-область тем же
+// mark_dirty_rect(), что уже вызывает каждый DRAW_*/FILL сам — см.
+// комментарий у опкода (wm_protocol.h). Клиентские координаты -> экранные,
+// тот же перевод и то же усечение по границам окна, что у do_win_draw_rect().
+static void do_win_mark_dirty(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
+    wm_window_t *w = get_owned(owner_pid, req->a[0]);
+    if (!w) { rep->result = -1; return; }
+    int x = req->a[1], y = req->a[2], rw = req->a[3], rh = req->a[4];
+
+    int x0 = x < 0 ? 0 : x;
+    int y0 = y < 0 ? 0 : y;
+    int x1 = x + rw; if (x1 > w->w) x1 = w->w;
+    int y1 = y + rh; if (y1 > w->h) y1 = w->h;
+
+    mark_dirty_rect(w->x + WM_BORDER + x0, w->y + WM_TITLEBAR_HEIGHT + y0, x1 - x0, y1 - y0);
+    rep->result = 0;
+}
+
 static void do_win_move(uint32_t owner_pid, const struct wm_request *req, struct wm_reply *rep) {
     wm_window_t *w = get_owned(owner_pid, req->a[0]);
     if (!w) { rep->result = -1; return; }
@@ -1408,6 +1427,7 @@ static void handle_client_request(uint32_t sender_pid, const struct wm_request *
         case WM_OP_WIN_DRAW_TEXT:  do_win_draw_text(sender_pid, req, &rep); break;
         case WM_OP_WIN_POLL_EVENT: do_win_poll_event(sender_pid, req, &rep); break;
         case WM_OP_WIN_MOVE:       do_win_move(sender_pid, req, &rep); break;
+        case WM_OP_WIN_MARK_DIRTY: do_win_mark_dirty(sender_pid, req, &rep); break;
         default: rep.result = -1; break;
     }
 

@@ -362,16 +362,28 @@ static int chunked_feed(chunk_state_t *st, const uint8_t *in, uint32_t len,
     return (st->phase == CHUNK_DONE) ? 1 : 0;
 }
 
-// ========== Основная функция ==========
+// ========== Приём и разбор заголовков (общий префикс fetch/fetch_open) ==========
 
 // Статические буферы: суммарно ~10КБ, в стек ядра такое класть нельзя.
 static char    g_header_buf[HTTP_HEADER_MAX];
 static uint8_t g_read_buf[HTTP_READ_CHUNK];
 static char    g_request_buf[HTTP_REQUEST_MAX];
 
-int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *status_out) {
-    if (!net_found()) return HTTP_FETCH_ENODEV;
+typedef struct {
+    int status;
+    int has_content_length;
+    unsigned long content_length;
+    int is_chunked;
+    uint32_t body_start;   // смещение начала тела внутри g_header_buf
+    uint32_t leftover_len; // байт тела, уже пришедших вместе с заголовками (hdr_len - body_start)
+} http_headers_t;
 
+// Общий префикс http_fetch()/http_fetch_open(): разбор URL, DNS, TCP/TLS-
+// коннект, отправка GET-запроса, приём и разбор заголовков (статус-строка +
+// Content-Length/Transfer-Encoding). Само тело не трогает — оставляет
+// соединение ОТКРЫТЫМ при успехе (0), закрывает его сам при любой ошибке
+// (отрицательный HTTP_FETCH_E*).
+static int fetch_connect_and_headers(const char *url, http_headers_t *out) {
     http_url_t u;
     if (http_parse_url(url, &u) != 0) return HTTP_FETCH_EBADURL;
 
@@ -400,13 +412,12 @@ int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *statu
         return u.is_https ? HTTP_FETCH_ETLS : HTTP_FETCH_ECONNECT;
     }
 
-    // --- Приём: сначала заголовки целиком, затем тело ---
+    // --- Приём заголовков ---
     uint64_t total_deadline = (uint64_t)sys_gettick() + HTTP_TOTAL_BUDGET_TICKS;
 
     uint32_t hdr_len = 0;
     uint32_t body_start = 0; // смещение начала тела внутри g_header_buf
     int headers_done = 0;
-    int conn_closed = 0;
 
     while (!headers_done) {
         if ((uint64_t)sys_gettick() >= total_deadline) {
@@ -467,7 +478,6 @@ int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *statu
         return HTTP_FETCH_EHTTP;
     }
     int status = (sp[0] - '0') * 100 + (sp[1] - '0') * 10 + (sp[2] - '0');
-    if (status_out) *status_out = status;
     printf("[HTTP] %s%s -> %d\n", u.is_https ? "https://" : "http://", u.host, status);
 
     // Заголовки: нужны ровно два. Разбор идёт по уже обрезанной на
@@ -512,15 +522,40 @@ int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *statu
     // пришло и то и другое, Content-Length игнорируется.
     if (is_chunked) has_content_length = 0;
 
+    out->status = status;
+    out->has_content_length = has_content_length;
+    out->content_length = content_length;
+    out->is_chunked = is_chunked;
+    out->body_start = body_start;
+    out->leftover_len = hdr_len - body_start;
+    return 0;
+}
+
+// ========== Основная функция (целиком за один вызов) ==========
+
+int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *status_out) {
+    if (!net_found()) return HTTP_FETCH_ENODEV;
+
+    http_headers_t h;
+    int rc = fetch_connect_and_headers(url, &h);
+    if (rc != 0) return rc;
+    if (status_out) *status_out = h.status;
+
+    int has_content_length = h.has_content_length;
+    unsigned long content_length = h.content_length;
+    int is_chunked = h.is_chunked;
+
     uint8_t *out = (uint8_t *)out_buf;
     unsigned long off = 0;
     chunk_state_t chunk;
     memset(&chunk, 0, sizeof(chunk));
     chunk.phase = CHUNK_SIZE;
+    int conn_closed = 0;
+    uint64_t total_deadline = (uint64_t)sys_gettick() + HTTP_TOTAL_BUDGET_TICKS;
 
     // Байты тела, уже пришедшие вместе с заголовками.
-    const uint8_t *leftover = (const uint8_t *)g_header_buf + body_start;
-    uint32_t leftover_len = hdr_len - body_start;
+    const uint8_t *leftover = (const uint8_t *)g_header_buf + h.body_start;
+    uint32_t leftover_len = h.leftover_len;
 
     // Если Content-Length нулевой или тела вообще нет — тело уже "целиком
     // получено", и ни одного чтения делать не надо (иначе цикл ниже ждал
@@ -583,4 +618,148 @@ int http_fetch(const char *url, void *out_buf, unsigned long out_cap, int *statu
 
     conn_close();
     return (int)off;
+}
+
+// ========== Потоковая загрузка (порциями, между вызовами — одно открытое
+// соединение) ==========
+//
+// Состояние одной активной потоковой загрузки — тот же приём единственного
+// соединения, что и g_is_tls выше, просто растянутый на несколько
+// IPC-запросов подряд (http_fetch_open(), затем сколько угодно
+// http_fetch_read(), затем http_fetch_close() — см. http_client.h).
+// g_stream_pending — хвост последнего conn_read(), который либо пришёл
+// вместе с заголовками (http_fetch_open() копирует его сюда из
+// g_header_buf), либо не влез целиком в cap предыдущего http_fetch_read()
+// (сам conn_read() отдаёт до HTTP_READ_CHUNK байт за раз, а cap у
+// вызывающего может оказаться меньше) — размер буфера общий, HTTP_HEADER_MAX
+// покрывает оба случая (сам HTTP_READ_CHUNK меньше).
+static int           g_stream_active;
+static int           g_stream_has_cl;
+static unsigned long g_stream_cl;
+static unsigned long g_stream_delivered;
+static int           g_stream_conn_closed;
+static uint8_t       g_stream_pending[HTTP_HEADER_MAX];
+static uint32_t      g_stream_pending_len;
+static uint32_t      g_stream_pending_off;
+
+int http_fetch_open(const char *url, int *status_out, int *has_length_out, unsigned long *length_out) {
+    if (!net_found()) return HTTP_FETCH_ENODEV;
+    if (g_stream_active) http_fetch_close(); // предыдущая загрузка не была закрыта явно
+
+    http_headers_t h;
+    int rc = fetch_connect_and_headers(url, &h);
+    if (rc != 0) return rc;
+
+    if (h.is_chunked) {
+        // См. комментарий у HTTP_FETCH_ECHUNKED в http_client.h — разбор
+        // chunked с паузой/продолжением между вызовами не реализован,
+        // единственный реальный источник (raw.githubusercontent.com) всегда
+        // шлёт статический файл с Content-Length.
+        conn_close();
+        return HTTP_FETCH_ECHUNKED;
+    }
+
+    if (status_out) *status_out = h.status;
+    if (has_length_out) *has_length_out = h.has_content_length;
+    if (h.has_content_length && length_out) *length_out = h.content_length;
+
+    g_stream_active = 1;
+    g_stream_has_cl = h.has_content_length;
+    g_stream_cl = h.content_length;
+    g_stream_delivered = 0;
+    g_stream_conn_closed = 0;
+    g_stream_pending_len = h.leftover_len;
+    g_stream_pending_off = 0;
+    if (h.leftover_len > 0) memcpy(g_stream_pending, g_header_buf + h.body_start, h.leftover_len);
+    return 0;
+}
+
+int http_fetch_read(void *out_buf, unsigned long out_cap) {
+    if (!g_stream_active) return HTTP_FETCH_EHTTP;
+    // Повторный read() ПОСЛЕ уже полностью отданного тела — обычный конец
+    // потока (как у read(2) после EOF), а не ошибка: вызывающий (dlpg.c)
+    // по протоколу крутит read() в цикле ровно до первого 0/<0, то есть
+    // САМ этот вызов — "последний" уже после того, как предыдущий вызов
+    // вернул ровно content_length байт. Раньше здесь по ошибке закрывали
+    // соединение и дальше отвечали HTTP_FETCH_EHTTP вместо честного 0.
+    if (g_stream_has_cl && g_stream_delivered >= g_stream_cl) return 0;
+    if (!g_stream_has_cl && g_stream_conn_closed && g_stream_pending_off >= g_stream_pending_len) return 0;
+
+    uint8_t *out = (uint8_t *)out_buf;
+    unsigned long off = 0;
+    // Как у conn_read() — бюджет на ОДНУ эту порцию, не на всю загрузку
+    // целиком (которая растягивается на сколько угодно вызовов подряд).
+    uint64_t deadline = (uint64_t)sys_gettick() + HTTP_TOTAL_BUDGET_TICKS;
+
+    for (;;) {
+        if (g_stream_pending_off < g_stream_pending_len) {
+            uint32_t avail = g_stream_pending_len - g_stream_pending_off;
+            unsigned long room = out_cap - off;
+            uint32_t take = (avail < room) ? avail : (uint32_t)room;
+            if (g_stream_has_cl) {
+                unsigned long need = g_stream_cl - g_stream_delivered;
+                if ((unsigned long)take > need) take = (uint32_t)need;
+            }
+            if (take > 0) {
+                memcpy(out + off, g_stream_pending + g_stream_pending_off, take);
+                off += take;
+                g_stream_pending_off += take;
+                g_stream_delivered += take;
+            } else {
+                // cap уже выбран (room==0) или тело уже всё отдано
+                // (content-length достигнута, но в pending ещё что-то
+                // осталось — не должно происходить при корректном сервере,
+                // но не растим off на мусор, если вдруг случится).
+                break;
+            }
+        }
+
+        if (off >= out_cap) break; // буфер вызывающего заполнен — отдаём, что набрали
+        if (g_stream_has_cl && g_stream_delivered >= g_stream_cl) break; // тело полностью отдано
+        if (g_stream_pending_off < g_stream_pending_len) continue; // ещё есть что раздать из pending
+
+        if (g_stream_conn_closed) {
+            if (!g_stream_has_cl) break; // framing "до закрытия" — нормальный конец тела
+            conn_close();
+            g_stream_active = 0;
+            printf("[HTTP] stream closed before body end (%lu of %lu)\n",
+                 g_stream_delivered, g_stream_cl);
+            return (off > 0) ? (int)off : HTTP_FETCH_EHTTP;
+        }
+
+        if ((uint64_t)sys_gettick() >= deadline) {
+            conn_close();
+            g_stream_active = 0;
+            printf("[HTTP] stream read budget exhausted\n");
+            return HTTP_FETCH_EHTTP;
+        }
+
+        int n = conn_read(g_stream_pending, sizeof(g_stream_pending));
+        if (n < 0) {
+            conn_close();
+            g_stream_active = 0;
+            return HTTP_FETCH_EHTTP;
+        }
+        if (n == 0) {
+            g_stream_conn_closed = 1;
+            continue;
+        }
+        g_stream_pending_len = (uint32_t)n;
+        g_stream_pending_off = 0;
+    }
+
+    // Соединение НЕ закрываем здесь, даже если тело уже полностью отдано —
+    // иначе следующий (ожидаемый по протоколу!) read() видит g_stream_active
+    // == 0 и возвращает ошибку вместо честного 0 (см. проверку в начале
+    // функции). Закрывает только явный http_fetch_close() — вызывающий
+    // (download_lpg_streaming() в dlpg.c) зовёт его всегда, успех или нет.
+    return (int)off;
+}
+
+void http_fetch_close(void) {
+    if (!g_stream_active) return;
+    conn_close();
+    g_stream_active = 0;
+    g_stream_pending_len = 0;
+    g_stream_pending_off = 0;
 }

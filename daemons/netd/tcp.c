@@ -3,6 +3,7 @@
 #include "net.h"
 #include "ip.h"
 #include "eth.h"
+#include "netrand.h"
 #include <string.h>
 
 #define TCP_MAX_SEGMENT_DATA 1460u
@@ -60,7 +61,6 @@ typedef struct {
 } tcp_conn_t;
 
 static tcp_conn_t g_conn;
-static uint16_t g_next_local_port = 49152;
 
 // Сколько байт готовы принять сейчас — объявляется в каждом исходящем
 // сегменте, включая ACK из tcp_ack_consumed(). Ноль — законно: останавливает
@@ -151,10 +151,18 @@ int tcp_connect(uint32_t remote_ip, uint16_t remote_port) {
     g_conn.state = TCP_STATE_CLOSED;
     g_conn.remote_ip = remote_ip;
     g_conn.remote_port = remote_port;
-    g_conn.local_port = g_next_local_port++;
-    if (g_next_local_port == 0) g_next_local_port = 49152;
-    // Произвольный ISN — единственное соединение зараз, конфликтов не бывает.
-    g_conn.snd_next = (uint32_t)((uint64_t)sys_gettick() * 65537u + 12345u);
+    // БЕЗОПАСНОСТЬ: раньше локальный порт был просто счётчиком (49152,
+    // 49153, ...), а ISN — произведением тика таймера на константу — оба
+    // легко угадываемы, что облегчает off-path инъекцию сегментов в это
+    // "соединение" (подделать RST/данные с правильными port+seq, даже не
+    // видя трафик). netrand_u16()/u32() — тот же приём энтропии, что уже у
+    // TLS (rdtsc+тики через SHA-256-пул, см. netrand.h) — не делает TCP
+    // полностью неуязвимым к инъекции (это всё ещё не криптографическая
+    // аутентификация), но убирает самый дешёвый способ угадать оба значения.
+    // 49152-65535 — диапазон эфемерных портов (IANA), 16384 — степень
+    // двойки, маска вместо %, чтобы не тянуть деление.
+    g_conn.local_port = (uint16_t)(49152u + (netrand_u16() & 0x3FFFu));
+    g_conn.snd_next = netrand_u32();
     g_conn.rcv_next = 0;
     g_conn.rx_len = 0;
     g_conn.rx_handed = 0;

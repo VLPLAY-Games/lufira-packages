@@ -2,12 +2,11 @@
 #include <lufira/syscall.h>
 #include "udp.h"
 #include "net.h"
+#include "netrand.h"
 #include <string.h>
 
 #define DNS_PORT                53
 #define DNS_QUERY_BUDGET_TICKS  300 // ~3000мс - тот же бюджет, что tcp_connect()/icmp_ping_wait()
-
-static uint16_t g_next_dns_txn_id = 1;
 
 // Пишет QNAME ("example.com" -> 0x07'e''x''a''m''p''l''e'0x03'c''o''m'0x00)
 // начиная с buf[pos]. Возвращает pos ПОСЛЕ терминатора, или -1 (пустой/
@@ -52,8 +51,16 @@ int dns_resolve(const char *hostname, uint32_t *out_ip) {
     if (!net_found()) return -1;
     if (!hostname || !hostname[0] || !out_ip) return -1;
 
-    uint16_t txn_id = g_next_dns_txn_id++;
-    if (g_next_dns_txn_id == 0) g_next_dns_txn_id = 1; // 0 легален как ID, но пусть будет предсказуемо ненулевым
+    // БЕЗОПАСНОСТЬ: раньше txn_id был инкрементным счётчиком, а исходный
+    // UDP-порт выводился из него же детерминированной формулой — угадать
+    // ОБА значения (нужны оба для спуфинга ответа — см. ниже) было
+    // тривиально, классическая DNS cache poisoning дыра: атакующий,
+    // предугадавший txn_id+порт, мог прислать поддельный ответ раньше
+    // настоящего DNS-сервера. netrand_u16() (тот же приём энтропии, что у
+    // TLS, см. netrand.h) для обоих, НЕЗАВИСИМО друг от друга — не делает
+    // спуфинг невозможным (ни DNSSEC, ни проверки источника здесь нет), но
+    // снимает самый дешёвый способ его провернуть.
+    uint16_t txn_id = netrand_u16();
 
     uint8_t query[12 + 256 + 4];
     query[0] = (uint8_t)(txn_id >> 8);
@@ -69,7 +76,10 @@ int dns_resolve(const char *hostname, uint32_t *out_ip) {
     query[pos++] = 0x00; query[pos++] = 0x01; // QTYPE = A
     query[pos++] = 0x00; query[pos++] = 0x01; // QCLASS = IN
 
-    uint16_t local_port = (uint16_t)(50000u + (txn_id % 10000u));
+    // Независимо от txn_id (иначе знание одного выдаёт другое) — 49152-
+    // 65535, диапазон эфемерных портов (IANA); 16384 — степень двойки,
+    // маска вместо %.
+    uint16_t local_port = (uint16_t)(49152u + (netrand_u16() & 0x3FFFu));
     udp_listen(local_port);
 
     uint32_t dns_ip = net_get_config()->dns_server;

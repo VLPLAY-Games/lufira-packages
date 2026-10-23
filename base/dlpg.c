@@ -51,9 +51,16 @@
 // собой (однопользовательская ОС, одна сессия шелла за раз).
 #define DOWNLOAD_TMP_PATH  "/etc/packages/.download.lpg"
 // index.json сегодня — десятки КБ (~40 пакетов); запас на рост списка.
+// Целиком в один SYS_NET_FETCH — не .lpg, расти вместе с каталогом пакетов,
+// а не с размером одного файла, так что буфер на весь ответ тут разумен.
 #define INDEX_FETCH_CAP    (256u * 1024u)
-// Крупнейший .lpg сегодня — ~35КБ (wm.elf); запас под будущий рост.
-#define PACKAGE_FETCH_CAP  (2u * 1024u * 1024u)
+// Был PACKAGE_FETCH_CAP (2МБ) — буфер на ВЕСЬ .lpg целиком в RAM, который
+// пришлось бы снова поднимать под следующий пакет крупнее этого потолка
+// (doom.lpg — уже около 4.8МБ, см. games/doom в этом репозитории). 0.9.5:
+// качаем порциями этого размера через SYS_NET_FETCH_OPEN/READ/CLOSE (см.
+// download_lpg_streaming() ниже) — размер .lpg теперь не ограничен ничем,
+// кроме места на диске.
+#define PACKAGE_FETCH_CHUNK (128u * 1024u)
 
 typedef struct {
     char name[LPG_NAME_MAX];
@@ -505,8 +512,70 @@ static void print_fetch_error(const char *prefix, long code) {
         case NET_FETCH_EHTTP:    printf("%s: malformed HTTP response\n", prefix); break;
         case NET_FETCH_ENOSPC:   printf("%s: response too large\n", prefix); break;
         case NET_FETCH_ENODEV:   printf("%s: no network device found\n", prefix); break;
+        case NET_FETCH_ECHUNKED: printf("%s: server sent a chunked response (not supported for streaming downloads)\n", prefix); break;
         default:                 printf("%s: network error (%ld)\n", prefix, code); break;
     }
+}
+
+// Качает url порциями по PACKAGE_FETCH_CHUNK байт прямо в DOWNLOAD_TMP_PATH
+// (SYS_NET_FETCH_OPEN/READ/CLOSE — см. комментарий у PACKAGE_FETCH_CHUNK) —
+// в любой момент в RAM только один чанк, не весь файл. 0 при успехе
+// (DOWNLOAD_TMP_PATH готов на диске, прогресс уже напечатан — "received N
+// byte(s), HTTP S", как раньше у не-потокового пути), 1 при ошибке
+// (DOWNLOAD_TMP_PATH подчищен, сообщение уже напечатано).
+static int download_lpg_streaming(const char *url, const char *log_prefix) {
+    int status = 0, has_length = 0;
+    unsigned long length = 0;
+    long rc = sys_net_fetch_open(url, &status, &has_length, &length);
+    if (rc != 0) {
+        print_fetch_error(log_prefix, rc);
+        return 1;
+    }
+    if (status != 200) {
+        printf("%s: server returned HTTP %d\n", log_prefix, status);
+        sys_net_fetch_close();
+        return 1;
+    }
+
+    long fd = sys_open(DOWNLOAD_TMP_PATH, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        printf("%s: failed to stage download\n", log_prefix);
+        sys_net_fetch_close();
+        return 1;
+    }
+
+    // Статический, не malloc/стек — ровно один чанк резидентно, независимо
+    // от того, сколько раз вызывается эта функция за жизнь процесса (один
+    // раз на install, в цикле на upgrade).
+    static uint8_t chunk[PACKAGE_FETCH_CHUNK];
+    long total = 0;
+    int failed = 0;
+    for (;;) {
+        long n = sys_net_fetch_read(chunk, sizeof(chunk));
+        if (n < 0) { print_fetch_error(log_prefix, n); failed = 1; break; }
+        if (n == 0) break;
+
+        long pos = 0;
+        while (pos < n) {
+            long w = sys_write((int)fd, chunk + pos, (unsigned long)(n - pos));
+            if (w <= 0) {
+                printf("%s: write error while staging download\n", log_prefix);
+                failed = 1;
+                break;
+            }
+            pos += w;
+        }
+        if (failed) break;
+        total += n;
+    }
+
+    sys_close((int)fd);
+    sys_net_fetch_close(); // идемпотентно — безвреден, даже если read() сам уже закрыл поток
+
+    if (failed) { sys_unlink(DOWNLOAD_TMP_PATH); return 1; }
+
+    printf("dlpg: received %ld byte(s), HTTP %d\n", total, status);
+    return 0;
 }
 
 static int do_sync(void) {
@@ -599,29 +668,7 @@ static int do_install_from_repo(const char *name, int allow_existing) {
     }
 
     printf("dlpg: downloading %s...\n", lpg_url);
-    uint8_t *pkgbuf = (uint8_t *)malloc(PACKAGE_FETCH_CAP);
-    if (!pkgbuf) { printf("dlpg: out of memory\n"); return 1; }
-
-    int status = 0;
-    long n = sys_net_fetch(lpg_url, pkgbuf, PACKAGE_FETCH_CAP, &status);
-    if (n < 0) {
-        print_fetch_error("dlpg: install", n);
-        free(pkgbuf);
-        return 1;
-    }
-    printf("dlpg: received %ld byte(s), HTTP %d\n", n, status);
-    if (status != 200) {
-        printf("dlpg: install '%s': server returned HTTP %d\n", name, status);
-        free(pkgbuf);
-        return 1;
-    }
-
-    if (write_whole_file(DOWNLOAD_TMP_PATH, pkgbuf, n) != 0) {
-        printf("dlpg: install '%s': failed to stage download\n", name);
-        free(pkgbuf);
-        return 1;
-    }
-    free(pkgbuf);
+    if (download_lpg_streaming(lpg_url, "dlpg: install") != 0) return 1;
 
     int rc = do_install(DOWNLOAD_TMP_PATH, allow_existing);
     sys_unlink(DOWNLOAD_TMP_PATH);
@@ -678,32 +725,7 @@ static int do_upgrade(const char *only_name) {
         // syscall, то же "сказать, что сейчас происходит" до и после.
         printf("dlpg: downloading %s...\n", lpg_url);
 
-        uint8_t *pkgbuf = (uint8_t *)malloc(PACKAGE_FETCH_CAP);
-        if (!pkgbuf) { printf("dlpg: out of memory, skipping '%s'\n", name); failed++; continue; }
-
-        int status = 0;
-        long n = sys_net_fetch(lpg_url, pkgbuf, PACKAGE_FETCH_CAP, &status);
-        if (n < 0) {
-            print_fetch_error("dlpg: upgrade", n);
-            free(pkgbuf);
-            failed++;
-            continue;
-        }
-        printf("dlpg: received %ld byte(s), HTTP %d\n", n, status);
-        if (status != 200) {
-            printf("dlpg: upgrade '%s': server returned HTTP %d\n", name, status);
-            free(pkgbuf);
-            failed++;
-            continue;
-        }
-
-        if (write_whole_file(DOWNLOAD_TMP_PATH, pkgbuf, n) != 0) {
-            printf("dlpg: upgrade '%s': failed to stage download\n", name);
-            free(pkgbuf);
-            failed++;
-            continue;
-        }
-        free(pkgbuf);
+        if (download_lpg_streaming(lpg_url, "dlpg: upgrade") != 0) { failed++; continue; }
 
         printf("dlpg: installing '%s'...\n", name);
         if (do_install(DOWNLOAD_TMP_PATH, 1) == 0) upgraded++; else failed++;

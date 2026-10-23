@@ -55,6 +55,46 @@ static void handle_fetch(const struct netd_request *req, struct netd_reply *repl
     reply->a[0] = status;
 }
 
+// FETCH_OPEN/READ/CLOSE — потоковая загрузка (0.9.5, см. netd_protocol.h и
+// http_client.h): дешевле, чем NETD_OP_FETCH, в точности один раз — URL
+// нужен только OPEN'у, а соединение http_client.c держит открытым сама
+// между вызовами, этому процессу (однопоточному, см. комментарий вверху
+// файла) ничего дополнительно хранить не надо.
+static void handle_fetch_open(const struct netd_request *req, struct netd_reply *reply) {
+    long url_virt = sys_shm_attach((int32_t)req->url_shm_id);
+    if (url_virt < 0) { reply->result = HTTP_FETCH_ENODEV; return; }
+    const char *url = (const char *)url_virt;
+
+    int status = 0, has_length = 0;
+    unsigned long length = 0;
+    int rc = http_fetch_open(url, &status, &has_length, &length);
+
+    sys_munmap((void *)url_virt, 4096);
+
+    reply->result = rc;
+    reply->a[0] = status;
+    reply->a[1] = has_length;
+    reply->content_length = (uint32_t)length;
+}
+
+static void handle_fetch_read(const struct netd_request *req, struct netd_reply *reply) {
+    if (req->cap == 0) { reply->result = 0; return; }
+    long virt = sys_shm_attach((int32_t)req->body_shm_id);
+    if (virt < 0) { reply->result = HTTP_FETCH_ENODEV; return; }
+
+    int n = http_fetch_read((void *)virt, req->cap);
+
+    uint64_t aligned_cap = ((uint64_t)req->cap + 4095u) & ~(uint64_t)4095u;
+    sys_munmap((void *)virt, aligned_cap);
+
+    reply->result = n;
+}
+
+static void handle_fetch_close(struct netd_reply *reply) {
+    http_fetch_close();
+    reply->result = 0;
+}
+
 static void handle_ping(const struct netd_request *req, struct netd_reply *reply) {
     if (!net_found()) { reply->result = -2; return; }
 
@@ -98,6 +138,9 @@ static void handle_request(uint32_t sender_pid, const struct netd_request *req) 
     case NETD_OP_PING:        handle_ping(req, &reply); break;
     case NETD_OP_CONFIG_GET:  handle_config_get(&reply); break;
     case NETD_OP_CONFIG_SET:  handle_config_set(req, &reply); break;
+    case NETD_OP_FETCH_OPEN:  handle_fetch_open(req, &reply); break;
+    case NETD_OP_FETCH_READ:  handle_fetch_read(req, &reply); break;
+    case NETD_OP_FETCH_CLOSE: handle_fetch_close(&reply); break;
     default:                  reply.result = -1; break;
     }
 

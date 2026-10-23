@@ -15,8 +15,11 @@
 #include <lufira/syscall.h>
 #include "../common/ip_addr.h"
 
-// Крупнейшее, что реально качают этим инструментом (страницы/мелкие
-// файлы) — тот же порядок, что PACKAGE_FETCH_CAP в dlpg.c.
+// Крупнейшее, что реально качают этим инструментом — страницы/мелкие
+// файлы, не что-то настолько большое, чтобы стоило переходить на
+// потоковую загрузку порциями (SYS_NET_FETCH_OPEN/READ/CLOSE, см. их
+// комментарий в kernel-side syscall.h и download_lpg_streaming() в
+// lufira-packages/base/dlpg.c, который на неё перешёл).
 #define WGET_FETCH_CAP (2u * 1024u * 1024u)
 
 static void print_fetch_error(long code) {
